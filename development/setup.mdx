@@ -1,0 +1,249 @@
+---
+title: Development Setup
+description: Set up your local development environment for Plotlist
+---
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+- **Node.js** (v18 or higher) and npm
+- **Expo CLI** compatible development environment
+- **Convex account** ([sign up at convex.dev](https://convex.dev))
+- **iOS Simulator** (macOS) or **Android Emulator**
+
+You'll also need API credentials for:
+
+- **TMDB API** for show metadata
+- **Twilio Verify** for phone authentication
+- **Google Gemini API** (optional, for recommendations)
+
+## Installation
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone the Plotlist repository to your local machine:
+
+    ```bash
+    git clone <repository-url>
+    cd plotlist
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    Install all project dependencies:
+
+    ```bash
+    npm install
+    ```
+
+    This installs both the React Native client dependencies and Convex backend packages.
+  </Step>
+
+  <Step title="Configure environment variables">
+    Copy the example environment file:
+
+    ```bash
+    cp .env.example .env
+    ```
+
+    Then edit `.env` with your credentials:
+
+    ```bash
+    # Convex deployment URL (get from Convex dashboard)
+    EXPO_PUBLIC_CONVEX_URL=https://your-deployment.convex.cloud
+
+    # TMDB API key for show data
+    TMDB_API_KEY=your_tmdb_api_key
+
+    # Twilio credentials for phone verification
+    TWILIO_ACCOUNT_SID=your_twilio_account_sid
+    TWILIO_AUTH_TOKEN=your_twilio_auth_token
+    TWILIO_VERIFY_SERVICE_SID=your_verify_service_sid
+
+    # Secret for hashing phone numbers
+    CONTACT_HASH_SECRET=your_random_secret_string
+
+    # Optional: App Review bypass for testing
+    ALLOW_APP_REVIEW_OTP_BYPASS=true
+    APP_REVIEW_TEST_PHONE=+15551234567
+    APP_REVIEW_TEST_CODE=123456
+
+    # Optional: Gemini API for recommendations
+    GEMINI_API_KEY=your_gemini_api_key
+    ```
+
+    <Note>
+      The `CONTACT_HASH_SECRET` should be a random string used to hash phone numbers before storing them. Generate a secure random string for this value.
+    </Note>
+  </Step>
+
+  <Step title="Start Convex development server">
+    Initialize and start the Convex backend:
+
+    ```bash
+    npx convex dev
+    ```
+
+    This command:
+    - Sets up your Convex deployment (first time only)
+    - Generates typed client APIs in `convex/_generated`
+    - Watches for changes to your Convex functions
+    - Syncs your schema and functions to the cloud
+
+    <Warning>
+      Keep this terminal window open while developing. Convex needs to run continuously to sync your backend code.
+    </Warning>
+  </Step>
+
+  <Step title="Run the app">
+    In a new terminal window, start the Expo development server:
+
+    ```bash
+    npm start
+    ```
+
+    Then choose your platform:
+
+    - Press `i` for iOS Simulator
+    - Press `a` for Android Emulator
+    - Press `w` for web browser
+
+    Or run directly:
+
+    ```bash
+    npm run ios      # iOS
+    npm run android  # Android
+    npm run web      # Web
+    ```
+  </Step>
+</Steps>
+
+## Project Structure
+
+Once set up, you'll have the following directory structure:
+
+```text
+plotlist/
+├── app/              # Expo Router screens and flows
+│   ├── (auth)/       # Authentication screens
+│   ├── (onboarding)/ # Onboarding flow
+│   ├── (tabs)/       # Main tab navigation
+│   ├── show/         # Show detail pages
+│   ├── profile/      # User profiles
+│   └── _layout.tsx   # Root layout with providers
+├── components/       # Reusable UI components
+├── convex/           # Backend code
+│   ├── schema.ts     # Database schema
+│   ├── auth.ts       # Authentication logic
+│   ├── users.ts      # User queries/mutations
+│   ├── shows.ts      # Show catalog logic
+│   ├── crons.ts      # Background jobs
+│   └── _generated/   # Auto-generated types
+├── lib/              # Client-side utilities
+│   ├── convex.ts     # Convex client setup
+│   ├── authStorage.ts # Auth token storage
+│   └── format.ts     # Formatting helpers
+└── package.json
+```
+
+## Development Workflow
+
+### Running Tests
+
+Run the test suite:
+
+```bash
+npm test          # Run once
+npm run test:watch # Watch mode
+```
+
+### Type Checking
+
+Run TypeScript type checking:
+
+```bash
+npm run typecheck
+```
+
+### Linting
+
+Run ESLint:
+
+```bash
+npm run lint
+```
+
+### All Checks
+
+Run type checking, linting, and tests together:
+
+```bash
+npm run check
+```
+
+### Regenerating Convex Types
+
+If your Convex functions aren't syncing properly:
+
+```bash
+npm run convex:codegen
+```
+
+## App Review Bypass
+
+For local development and testing, you can bypass phone verification:
+
+1. Set `ALLOW_APP_REVIEW_OTP_BYPASS=true` in your `.env`
+2. Configure test credentials:
+   ```bash
+   APP_REVIEW_TEST_PHONE=+15551234567
+   APP_REVIEW_TEST_CODE=123456
+   ```
+3. Sign in with the test phone number and code
+
+<Warning>
+  Never enable App Review bypass in production. This is a development-only feature.
+</Warning>
+
+## Troubleshooting
+
+### Convex Connection Issues
+
+If you see "Failed to connect to Convex":
+
+1. Verify `EXPO_PUBLIC_CONVEX_URL` is set correctly
+2. Ensure `npx convex dev` is running
+3. Check your internet connection
+4. Restart the Expo dev server
+
+### Missing Types
+
+If you see TypeScript errors about missing Convex types:
+
+1. Ensure `npx convex dev` is running
+2. Run `npm run convex:codegen` manually
+3. Restart your TypeScript server in your editor
+
+### Twilio Verification Errors
+
+If phone verification fails:
+
+1. Verify all Twilio credentials are correct
+2. Check your Twilio Verify service is active
+3. Ensure your phone number is in E.164 format (+1XXXXXXXXXX)
+4. Use the App Review bypass for local testing
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Architecture Overview" icon="sitemap" href="/development/architecture">
+    Learn about Plotlist's system architecture
+  </Card>
+  <Card title="Convex Backend" icon="database" href="/development/convex-backend">
+    Dive into the Convex backend implementation
+  </Card>
+  <Card title="Authentication" icon="lock" href="/development/authentication">
+    Understand the auth flow
+  </Card>
+</CardGroup>

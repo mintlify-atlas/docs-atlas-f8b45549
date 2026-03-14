@@ -1,0 +1,572 @@
+---
+title: "Components"
+description: "React Native components for building the Plotlist UI"
+---
+
+Core UI components used throughout the Plotlist app. All components are built with React Native and styled using NativeWind (Tailwind CSS).
+
+## UI Components
+
+### Avatar
+
+Displays a user avatar image or initials fallback.
+
+```tsx components/Avatar.tsx
+export function Avatar({
+  uri,
+  label,
+  size = 40,
+}: {
+  uri?: string | null;
+  label?: string | null;
+  size?: number;
+})
+```
+
+**Props:**
+- `uri` - Avatar image URL
+- `label` - Name to generate initials from (used as fallback)
+- `size` - Avatar diameter in pixels (default: 40)
+
+**Usage:**
+```tsx
+<Avatar 
+  uri={user.avatarUrl} 
+  label={user.displayName} 
+  size={44} 
+/>
+```
+
+### Poster
+
+Displays a show/movie poster with aspect ratio 2:3.
+
+```tsx components/Poster.tsx
+export function Poster({
+  uri,
+  size = "md",
+  width,
+  className,
+}: {
+  uri?: string | null;
+  size?: "sm" | "md" | "lg";
+  width?: number;
+  className?: string;
+})
+```
+
+**Props:**
+- `uri` - Poster image URL
+- `size` - Preset size (sm: 60px, md: 90px, lg: 140px)
+- `width` - Custom width in pixels (overrides size)
+- `className` - Additional Tailwind classes
+
+**Usage:**
+```tsx
+<Poster uri={show.posterUrl} size="lg" />
+```
+
+### EmptyState
+
+Displays a centered empty state message.
+
+```tsx components/EmptyState.tsx
+export function EmptyState({ 
+  title, 
+  description 
+}: { 
+  title: string; 
+  description?: string; 
+})
+```
+
+**Usage:**
+```tsx
+<EmptyState 
+  title="No reviews yet" 
+  description="Be the first to review this show" 
+/>
+```
+
+## Form Components
+
+### TextField
+
+Standard text input field with label and optional error/hint.
+
+```tsx components/TextField.tsx
+export function TextField({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  secureTextEntry = false,
+  autoCapitalize = "none",
+  multiline = false,
+  className,
+  keyboardType,
+  textContentType,
+  autoComplete,
+  maxLength,
+  editable = true,
+  prefix,
+  hint,
+  error,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  placeholder?: string;
+  secureTextEntry?: boolean;
+  autoCapitalize?: "none" | "sentences" | "words" | "characters";
+  multiline?: boolean;
+  className?: string;
+  keyboardType?: TextInputProps["keyboardType"];
+  textContentType?: TextInputProps["textContentType"];
+  autoComplete?: TextInputProps["autoComplete"];
+  maxLength?: number;
+  editable?: boolean;
+  prefix?: string;
+  hint?: string;
+  error?: string;
+})
+```
+
+**Usage:**
+```tsx
+<TextField
+  label="Display Name"
+  value={displayName}
+  onChangeText={setDisplayName}
+  placeholder="Enter your name"
+  error={nameError}
+  hint="This is how others will see you"
+/>
+```
+
+### StarRating
+
+Interactive 5-star rating component with half-star support.
+
+```tsx components/StarRating.tsx
+export function StarRating({
+  value,
+  onChange,
+  size = 28,
+  readonly = false,
+}: {
+  value: number;
+  onChange?: (value: number) => void;
+  size?: number;
+  readonly?: boolean;
+})
+```
+
+**Props:**
+- `value` - Current rating (0-5, supports 0.5 increments)
+- `onChange` - Callback when rating changes
+- `size` - Star icon size in pixels
+- `readonly` - Disable interaction
+
+**Usage:**
+```tsx
+<StarRating 
+  value={rating} 
+  onChange={setRating} 
+  size={32} 
+/>
+```
+
+### PrimaryButton
+
+Main call-to-action button with loading state.
+
+```tsx components/PrimaryButton.tsx
+export function PrimaryButton({
+  label,
+  onPress,
+  disabled = false,
+  loading = false,
+  className,
+}: {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  loading?: boolean;
+  className?: string;
+})
+```
+
+**Usage:**
+```tsx
+<PrimaryButton
+  label="Save Changes"
+  onPress={handleSave}
+  loading={isSaving}
+/>
+```
+
+## Content Components
+
+### ShowRow
+
+Horizontal card displaying show information.
+
+```tsx components/ShowRow.tsx
+export function ShowRow({
+  id,
+  title,
+  year,
+  posterUrl,
+  subtitle,
+  onPress,
+}: {
+  id: string;
+  title: string;
+  year?: number | null;
+  posterUrl?: string | null;
+  subtitle?: string;
+  onPress?: () => void;
+})
+```
+
+**Props:**
+- `id` - Show ID for navigation
+- `title` - Show title
+- `year` - Release year
+- `posterUrl` - Poster image URL
+- `subtitle` - Optional subtitle text
+- `onPress` - Custom press handler (default: navigate to show page)
+
+**Usage:**
+```tsx
+<ShowRow
+  id={show._id}
+  title={show.title}
+  year={show.year}
+  posterUrl={show.posterUrl}
+  subtitle="Drama · 5 seasons"
+/>
+```
+
+### ReviewRow
+
+Displays a review with rating, author, and excerpt.
+
+```tsx components/ReviewRow.tsx
+export function ReviewRow({
+  id,
+  showTitle,
+  posterUrl,
+  rating,
+  reviewText,
+  authorName,
+  authorUsername,
+  authorAvatarUrl,
+  createdAt,
+  spoiler = false,
+}: {
+  id: string;
+  showTitle?: string;
+  posterUrl?: string | null;
+  rating: number;
+  reviewText: string;
+  authorName?: string | null;
+  authorUsername?: string | null;
+  authorAvatarUrl?: string | null;
+  createdAt?: number;
+  spoiler?: boolean;
+})
+```
+
+**Usage:**
+```tsx
+<ReviewRow
+  id={review._id}
+  showTitle={show.title}
+  posterUrl={show.posterUrl}
+  rating={review.rating}
+  reviewText={review.text}
+  authorName={author.displayName}
+  authorUsername={author.username}
+  createdAt={review.createdAt}
+  spoiler={review.hasSpoilers}
+/>
+```
+
+### UserRow
+
+User profile card with follow button and relationship indicators.
+
+```tsx components/UserRow.tsx
+export const UserRow = memo(function UserRow({
+  userId,
+  displayName,
+  username,
+  avatarUrl,
+  subtitle,
+  isFollowing = false,
+  followsYou = false,
+  isMutualFollow = false,
+  mutualCount = 0,
+  inContacts = false,
+  showFollowButton = true,
+  taste = null,
+}: {
+  userId: Id<"users">;
+  displayName?: string | null;
+  username?: string | null;
+  avatarUrl?: string | null;
+  subtitle?: string | null;
+  isFollowing?: boolean;
+  followsYou?: boolean;
+  isMutualFollow?: boolean;
+  mutualCount?: number;
+  inContacts?: boolean;
+  showFollowButton?: boolean;
+  taste?: TasteMatchData | null;
+}))
+```
+
+**Usage:**
+```tsx
+<UserRow
+  userId={user._id}
+  displayName={user.displayName}
+  username={user.username}
+  avatarUrl={user.avatarUrl}
+  isFollowing={isFollowing}
+  followsYou={user.followsYou}
+  mutualCount={mutualFollowCount}
+/>
+```
+
+### FeedItem
+
+Activity feed item (currently supports reviews).
+
+```tsx components/FeedItem.tsx
+export type FeedReviewItem = {
+  type: "review";
+  timestamp: number;
+  review: { _id: string; rating: number; reviewText: string };
+  user?: { _id: string; displayName?: string | null; username?: string | null } | null;
+  avatarUrl?: string | null;
+  show?: { _id: string; title: string; year?: number | null; posterUrl?: string | null } | null;
+};
+
+export function FeedItem({ item }: { item: FeedItemProps })
+```
+
+**Usage:**
+```tsx
+<FeedItem item={feedItem} />
+```
+
+## Interactive Components
+
+### StatusSelector
+
+Bottom sheet for selecting show watch status.
+
+```tsx components/StatusSelector.tsx
+type WatchStatus = "watchlist" | "watching" | "completed" | "dropped";
+
+export function StatusSelector({
+  currentStatus,
+  onSelect,
+  onRemove,
+}: {
+  currentStatus: WatchStatus | undefined | null;
+  onSelect: (status: WatchStatus) => void;
+  onRemove?: () => void;
+})
+```
+
+**Usage:**
+```tsx
+<StatusSelector
+  currentStatus={watchStatus}
+  onSelect={(status) => updateStatus(status)}
+  onRemove={() => removeFromList()}
+/>
+```
+
+### FilterDropdown
+
+Bottom sheet dropdown for filtering lists.
+
+```tsx components/FilterDropdown.tsx
+export type FilterOption = {
+  value: string;
+  label: string;
+  count?: number;
+};
+
+export function FilterDropdown({ 
+  options, 
+  value, 
+  onChange 
+}: {
+  options: FilterOption[];
+  value: string;
+  onChange: (value: string) => void;
+})
+```
+
+**Usage:**
+```tsx
+<FilterDropdown
+  options={[
+    { value: "all", label: "All Shows", count: 42 },
+    { value: "watching", label: "Watching", count: 8 },
+    { value: "completed", label: "Completed", count: 34 }
+  ]}
+  value={filter}
+  onChange={setFilter}
+/>
+```
+
+### LikeButton
+
+Toggleable like button with count.
+
+```tsx components/LikeButton.tsx
+export function LikeButton({
+  targetType,
+  targetId,
+}: {
+  targetType: "review" | "log" | "list";
+  targetId: string;
+})
+```
+
+**Usage:**
+```tsx
+<LikeButton targetType="review" targetId={review._id} />
+```
+
+## Complex Components
+
+### EpisodeGuide
+
+Comprehensive episode browser with season management.
+
+```tsx components/EpisodeGuide.tsx
+type EpisodeGuideEpisode = {
+  id: number | string;
+  name: string;
+  episodeNumber: number;
+  airDate?: string | null;
+  overview?: string | null;
+  stillPath?: string | null;
+  voteAverage?: number;
+  voteCount?: number;
+};
+
+type EpisodeGuideSeason = {
+  id: number | string;
+  name: string;
+  season_number: number;
+  air_date?: string | null;
+  episode_count?: number;
+};
+
+export const EpisodeGuide = memo(function EpisodeGuide({
+  seasons,
+  visibleSeasonCount,
+  seasonDetailsByNumber,
+  seasonLoadStateByNumber,
+  seasonLoadErrorByNumber,
+  isAuthenticated,
+  watchedEpisodeSet,
+  myEpisodeRatingMap,
+  isEpisodeAvailable,
+  onLoadMoreSeasons,
+  onRetrySeason,
+  onMarkSeasonWatched,
+  onUnmarkSeasonWatched,
+  onToggleEpisode,
+  onSelectEpisode,
+}: EpisodeGuideProps))
+```
+
+**Features:**
+- Season-by-season episode browsing
+- Episode watch tracking
+- Season-level bulk actions
+- Episode ratings display
+- Lazy loading of season details
+- Error handling and retry
+
+**Usage:**
+```tsx
+<EpisodeGuide
+  seasons={seasons}
+  visibleSeasonCount={visibleSeasonCount}
+  seasonDetailsByNumber={seasonDetails}
+  seasonLoadStateByNumber={loadStates}
+  seasonLoadErrorByNumber={loadErrors}
+  isAuthenticated={isAuthenticated}
+  watchedEpisodeSet={watchedSet}
+  myEpisodeRatingMap={ratingsMap}
+  isEpisodeAvailable={(airDate) => isBeforeToday(airDate)}
+  onLoadMoreSeasons={loadMore}
+  onRetrySeason={retrySeason}
+  onMarkSeasonWatched={markSeasonWatched}
+  onUnmarkSeasonWatched={unmarkSeasonWatched}
+  onToggleEpisode={toggleEpisode}
+  onSelectEpisode={selectEpisode}
+/>
+```
+
+## Design Patterns
+
+### Haptic Feedback
+
+All interactive components use haptic feedback:
+
+```tsx
+import * as Haptics from "expo-haptics";
+
+const handlePress = () => {
+  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  // ... handle action
+};
+```
+
+### Navigation
+
+Components use `expo-router` for navigation:
+
+```tsx
+import { useRouter } from "expo-router";
+
+const router = useRouter();
+router.push(`/show/${showId}`);
+```
+
+### Styling
+
+All components use NativeWind (Tailwind) classes:
+
+```tsx
+<View className="rounded-2xl border border-dark-border bg-dark-card p-4">
+  <Text className="text-base font-semibold text-text-primary">
+    {title}
+  </Text>
+</View>
+```
+
+### Color Tokens
+
+Common color classes used throughout:
+- `bg-dark-card` - Card background
+- `bg-dark-elevated` - Elevated surface
+- `bg-dark-hover` - Active/hover state
+- `border-dark-border` - Border color
+- `text-text-primary` - Primary text
+- `text-text-secondary` - Secondary text
+- `text-text-tertiary` - Tertiary/muted text
+- `bg-brand-500` - Brand blue
+- `bg-status-danger` - Error/danger state

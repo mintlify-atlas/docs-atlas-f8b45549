@@ -1,0 +1,360 @@
+---
+title: "Social Features"
+description: "Connect with friends, follow users, share reviews, and discover what others are watching"
+---
+
+# Social Features
+
+Plotlist is built around social TV discovery. Users can follow friends, share reviews, like content, and see what others are watching.
+
+## Following & Connections
+
+### Follow System
+
+The follow system allows users to build their social graph:
+
+```typescript
+follows: {
+  followerId: Id<"users">,
+  followeeId: Id<"users">,
+  createdAt: number
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="Follow Users" icon="user-plus">
+    Users can follow anyone on the platform to see their activity
+  </Card>
+  <Card title="Follower Counts" icon="users">
+    Profile displays follower and following counts
+  </Card>
+</CardGroup>
+
+### Follow Management
+
+```typescript
+// Follow a user
+const follow = useMutation(api.follows.follow);
+follow({ userIdToFollow: "user_abc" });
+
+// Unfollow a user
+const unfollow = useMutation(api.follows.unfollow);
+unfollow({ userIdToUnfollow: "user_abc" });
+
+// Check if following
+const isFollowing = useQuery(api.follows.isFollowing, { userId });
+```
+
+<Info>
+Following and unfollowing automatically updates both users' `countsFollowing` and `countsFollowers` counters.
+</Info>
+
+### Contact Sync & Friend Discovery
+
+Plotlist helps users find friends through contact sync:
+
+```typescript
+contactSyncEntries: {
+  ownerId: Id<"users">,
+  sourceRecordId?: string,
+  displayName: string,
+  contactHash: string,
+  matchedUserId?: Id<"users">,
+  invitedAt?: number,
+  createdAt: number,
+  updatedAt: number
+}
+```
+
+#### How Contact Sync Works
+
+1. **Privacy-First**: Phone numbers are hashed before storage
+2. **Matching**: Hashes are matched against existing users' phone hashes
+3. **Invites**: Users can invite unmatched contacts to join Plotlist
+4. **Rate Limited**: Maximum 6 syncs per 10 minutes
+
+<Accordion title="Contact Sync Flow">
+```typescript
+// Sync contacts
+const syncSnapshot = useAction(api.contacts.syncSnapshot);
+
+const result = await syncSnapshot({
+  entries: [
+    {
+      sourceRecordId: "contact_1",
+      displayName: "Alice Smith",
+      phone: "+1234567890"
+    }
+  ]
+});
+
+// Result includes:
+// - totalCount: number of contacts synced
+// - matchedCount: contacts found on Plotlist
+// - inviteCount: contacts not yet on platform
+```
+</Accordion>
+
+## Reviews & Ratings
+
+Users can write reviews and rate shows to share their opinions.
+
+### Review Structure
+
+```typescript
+reviews: {
+  authorId: Id<"users">,
+  showId: Id<"shows">,
+  rating: number, // 0.5 to 5.0 in 0.5 increments
+  reviewText?: string,
+  spoiler: boolean,
+  seasonNumber?: number,
+  episodeNumber?: number,
+  episodeTitle?: string,
+  createdAt: number,
+  updatedAt?: number
+}
+```
+
+### Review Types
+
+<CardGroup cols={2}>
+  <Card title="Show Reviews" icon="star">
+    Overall review of an entire show (max 5000 characters)
+  </Card>
+  <Card title="Episode Ratings" icon="star-half">
+    Quick ratings for individual episodes
+  </Card>
+</CardGroup>
+
+<Note>
+Users can have one review per show (for show-level reviews) and one rating per episode.
+</Note>
+
+### Social Distribution
+
+- **Feed Items**: Show-level reviews appear in followers' feeds
+- **Episode ratings**: Episode ratings are private, not posted to feeds
+- **Spoiler Warnings**: Reviews can be marked as spoilers
+- **Likes & Comments**: Reviews support social engagement
+
+## Likes & Comments
+
+Users can engage with content through likes and comments.
+
+### Likes System
+
+```typescript
+likes: {
+  userId: Id<"users">,
+  targetType: "review" | "log" | "list",
+  targetId: string,
+  createdAt: number
+}
+```
+
+Supported like targets:
+- Reviews
+- Watch logs
+- Custom lists
+
+### Comments System
+
+```typescript
+comments: {
+  authorId: Id<"users">,
+  targetType: "review" | "log" | "list",
+  targetId: string,
+  text: string,
+  createdAt: number
+}
+```
+
+Users can comment on:
+- Reviews (both show and episode reviews)
+- Watch logs
+- Public lists
+
+## Activity Feed
+
+The activity feed shows recent activity from followed users.
+
+### Feed Items
+
+```typescript
+feedItems: {
+  ownerId: Id<"users">,
+  actorId: Id<"users">,
+  type: "review" | "log",
+  targetId: string,
+  showId: Id<"shows">,
+  timestamp: number,
+  createdAt: number
+}
+```
+
+<Info>
+Feed items are created for both the actor (user performing action) and all their followers (up to 500).
+</Info>
+
+### Feed Display
+
+The `FeedItem` component shows:
+- User avatar and name
+- Activity type ("Reviewed")
+- Timestamp
+- Show poster and title
+- Review content preview
+- Links to full review and user profile
+
+### Feed Queries
+
+```typescript
+// Get feed for current user
+const feed = useQuery(api.feed.forUser, { limit: 40 });
+
+// Paginated feed
+const paginatedFeed = useQuery(api.feed.listForUser, {
+  paginationOpts: { numItems: 20, cursor: null }
+});
+```
+
+## Profile Visibility
+
+Plotlist gives users granular control over what they share.
+
+### Visibility Settings
+
+```typescript
+type ProfileVisibility = {
+  profile: "public" | "followers" | "private",
+  watchlist: "public" | "followers" | "private",
+  activity: "public" | "followers" | "private",
+  reviews: "public" | "followers" | "private",
+  lists: "public" | "followers" | "private"
+}
+```
+
+### Visibility Levels
+
+<CardGroup cols={3}>
+  <Card title="Public" icon="globe">
+    Visible to everyone on the platform
+  </Card>
+  <Card title="Followers" icon="users">
+    Visible only to mutual followers or one-way followers
+  </Card>
+  <Card title="Private" icon="lock">
+    Visible only to the user themselves
+  </Card>
+</CardGroup>
+
+### Mutual Followers
+
+The system can detect mutual follow relationships:
+
+```typescript
+function canViewerSeeSection({
+  ownerId,
+  viewerId,
+  visibility,
+  ownerFollowsViewer
+}) {
+  if (ownerId === viewerId) return true;
+  if (visibility === "public") return true;
+  if (visibility === "private") return false;
+  // For "followers" visibility
+  return ownerFollowsViewer === true;
+}
+```
+
+<Accordion title="Profile Visibility Check">
+```typescript
+const profileVisibility = getProfileVisibilitySettings(owner);
+const ownerFollowsViewer = await getOwnerFollowsViewer(
+  ctx,
+  ownerId,
+  viewerId
+);
+
+const canViewWatchlist = canViewerSeeSection({
+  ownerId,
+  viewerId,
+  visibility: profileVisibility.watchlist,
+  ownerFollowsViewer
+});
+```
+</Accordion>
+
+## User Profiles
+
+Each user has a rich profile showing their TV watching identity.
+
+### Profile Data
+
+```typescript
+users: {
+  // Identity
+  username?: string,
+  displayName?: string,
+  bio?: string,
+  avatarStorageId?: Id<"_storage">,
+  
+  // Social counts
+  countsFollowers?: number,
+  countsFollowing?: number,
+  countsReviews?: number,
+  countsLogs?: number,
+  countsLists?: number,
+  
+  // Watch stats
+  countsWatchlist?: number,
+  countsWatching?: number,
+  countsCompleted?: number,
+  countsDropped?: number,
+  countsTotalShows?: number,
+  
+  // Preferences
+  favoriteShowIds?: Id<"shows">[],
+  favoriteGenres?: string[],
+  profileVisibility?: ProfileVisibility
+}
+```
+
+### Public User Data
+
+The `toPublicUser` function filters user data for public display:
+
+```typescript
+function toPublicUser(user) {
+  return {
+    _id: user._id,
+    username: user.username,
+    displayName: user.displayName,
+    bio: user.bio,
+    // Excludes email, phone, and other private fields
+  };
+}
+```
+
+## Reporting & Moderation
+
+Users can report inappropriate content:
+
+```typescript
+reports: {
+  reporterId: Id<"users">,
+  targetType: "review" | "log" | "list",
+  targetId: string,
+  reason?: string,
+  createdAt: number,
+  status: "open" | "resolved",
+  resolvedAt?: number,
+  resolvedBy?: Id<"users">,
+  action?: "dismiss" | "delete"
+}
+```
+
+<Info>
+Admin users can review reports and take action to maintain community standards.
+</Info>

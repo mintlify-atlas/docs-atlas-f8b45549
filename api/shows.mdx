@@ -1,0 +1,494 @@
+---
+title: 'Shows API'
+description: 'TV show catalog, TMDB integration, and metadata caching'
+---
+
+## Overview
+
+The Shows API manages the TV show catalog, integrates with TMDB for metadata, implements caching for performance, and provides search capabilities.
+
+## Queries
+
+### get
+
+Get a show by ID.
+
+```typescript
+export const get = query({
+  args: { showId: v.id("shows") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.showId);
+  },
+});
+```
+
+<ParamField path="showId" type="Id<'shows'>" required>
+  Show document ID
+</ParamField>
+
+**Returns:** Show document or `null`.
+
+### getByExternal
+
+Lookup show by external source and ID.
+
+```typescript
+export const getByExternal = query({
+  args: { 
+    externalSource: v.string(), 
+    externalId: v.string() 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="externalSource" type="string" required>
+  External data source (typically "tmdb")
+</ParamField>
+
+<ParamField path="externalId" type="string" required>
+  TMDB show ID
+</ParamField>
+
+**Returns:** Show document or `null`.
+
+### search
+
+Search shows using full-text search.
+
+```typescript
+export const search = query({
+  args: { 
+    text: v.string(), 
+    limit: v.optional(v.number()) 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="text" type="string" required>
+  Search query
+</ParamField>
+
+<ParamField path="limit" type="number">
+  Maximum results (1-50, default 20)
+</ParamField>
+
+**Returns:** Array of show documents matching the query.
+
+## Actions
+
+### searchCatalog
+
+Hybrid semantic + lexical search using embeddings.
+
+```typescript
+export const searchCatalog = action({
+  args: { text: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.runAction(api.embeddings.searchShows, {
+      text: args.text,
+      limit: 12,
+    });
+  },
+});
+```
+
+<ParamField path="text" type="string" required>
+  Natural language search query
+</ParamField>
+
+**Returns:** Array of shows ranked by hybrid relevance score.
+
+**Features:**
+- Semantic understanding ("shows like Breaking Bad but funny")
+- Exact and prefix title matching
+- Genre intent detection
+- Popularity weighting
+- TMDB fallback for missing shows
+
+### getTmdbList
+
+Get curated lists from TMDB.
+
+```typescript
+export const getTmdbList = action({
+  args: {
+    category: v.union(
+      v.literal("popular"),
+      v.literal("top_rated"),
+      v.literal("on_the_air"),
+      v.literal("genre_drama"),
+      v.literal("genre_comedy"),
+      v.literal("genre_sci_fi"),
+      v.literal("netflix"),
+      v.literal("apple_tv"),
+      v.literal("max"),
+      v.literal("disney_plus"),
+      v.literal("hulu"),
+      v.literal("prime_video"),
+    ),
+    limit: v.optional(v.number()),
+    page: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="category" type="string" required>
+  List category to fetch
+</ParamField>
+
+<ParamField path="limit" type="number">
+  Results per page (1-20, default 20)
+</ParamField>
+
+<ParamField path="page" type="number">
+  Page number (default 1)
+</ParamField>
+
+**Returns:** Array of catalog items with:
+
+<ResponseField name="externalSource" type="string">
+  Always "tmdb"
+</ResponseField>
+
+<ResponseField name="externalId" type="string">
+  TMDB show ID
+</ResponseField>
+
+<ResponseField name="title" type="string">
+  Show title
+</ResponseField>
+
+<ResponseField name="year" type="number">
+  First air year
+</ResponseField>
+
+<ResponseField name="overview" type="string">
+  Show description
+</ResponseField>
+
+<ResponseField name="posterUrl" type="string">
+  Poster image URL
+</ResponseField>
+
+**Caching:** Results cached for 24 hours.
+
+### ingestFromCatalog
+
+Import a show from TMDB into the local database.
+
+```typescript
+export const ingestFromCatalog = action({
+  args: {
+    externalSource: v.string(),
+    externalId: v.string(),
+    title: v.optional(v.string()),
+    originalTitle: v.optional(v.string()),
+    year: v.optional(v.number()),
+    overview: v.optional(v.string()),
+    posterUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="externalSource" type="string" required>
+  Must be "tmdb"
+</ParamField>
+
+<ParamField path="externalId" type="string" required>
+  TMDB show ID
+</ParamField>
+
+<ParamField path="title" type="string">
+  Show title (fetched from TMDB if not provided)
+</ParamField>
+
+**Returns:** Show document ID.
+
+**Side effects:**
+- Creates/updates show in database
+- Schedules embedding generation
+- Fetches full metadata from TMDB if only ID provided
+
+### getExtendedDetails
+
+Get comprehensive show metadata from TMDB (cached).
+
+```typescript
+export const getExtendedDetails = action({
+  args: { externalId: v.string() },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="externalId" type="string" required>
+  TMDB show ID
+</ParamField>
+
+**Returns:** Extended show details:
+
+<Expandable title="Cast & Crew">
+  <ResponseField name="cast" type="array">
+    Top 20 cast members with name, character, profilePath
+  </ResponseField>
+  
+  <ResponseField name="crew" type="array">
+    Key crew (creators, directors, writers) with name, job, profilePath
+  </ResponseField>
+  
+  <ResponseField name="createdBy" type="array">
+    Show creators with name and profilePath
+  </ResponseField>
+</Expandable>
+
+<Expandable title="Metadata">
+  <ResponseField name="genres" type="array">
+    Genre objects with id and name
+  </ResponseField>
+  
+  <ResponseField name="networks" type="array">
+    Original networks
+  </ResponseField>
+  
+  <ResponseField name="status" type="string">
+    Production status (e.g., "Returning Series")
+  </ResponseField>
+  
+  <ResponseField name="numberOfSeasons" type="number">
+    Total season count
+  </ResponseField>
+  
+  <ResponseField name="numberOfEpisodes" type="number">
+    Total episode count
+  </ResponseField>
+  
+  <ResponseField name="episodeRunTime" type="number">
+    Typical episode duration in minutes
+  </ResponseField>
+  
+  <ResponseField name="firstAirDate" type="string">
+    First air date (YYYY-MM-DD)
+  </ResponseField>
+  
+  <ResponseField name="lastAirDate" type="string">
+    Most recent air date
+  </ResponseField>
+</Expandable>
+
+<Expandable title="Media">
+  <ResponseField name="backdropPath" type="string">
+    Backdrop image URL (1280px)
+  </ResponseField>
+  
+  <ResponseField name="videos" type="array">
+    YouTube trailers and teasers with key, name, type
+  </ResponseField>
+</Expandable>
+
+<Expandable title="Streaming">
+  <ResponseField name="watchProviders" type="array">
+    US streaming providers with id, name, logoUrl, availability, deepLinkUrl
+  </ResponseField>
+  
+  <ResponseField name="watchProvidersLink" type="string">
+    JustWatch link for the show
+  </ResponseField>
+</Expandable>
+
+<Expandable title="Recommendations">
+  <ResponseField name="similar" type="array">
+    Up to 10 similar shows with id, title, posterPath, voteAverage
+  </ResponseField>
+</Expandable>
+
+**Caching:** Results cached for 7 days.
+
+**Rate limiting:** 30 requests per minute per user.
+
+### getSeasonDetails
+
+Get season and episode details from TMDB.
+
+```typescript
+export const getSeasonDetails = action({
+  args: { 
+    externalId: v.string(), 
+    seasonNumber: v.number() 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="externalId" type="string" required>
+  TMDB show ID
+</ParamField>
+
+<ParamField path="seasonNumber" type="number" required>
+  Season number (1-based)
+</ParamField>
+
+**Returns:** Season details:
+
+<ResponseField name="seasonNumber" type="number">
+  Season number
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Season name
+</ResponseField>
+
+<ResponseField name="overview" type="string">
+  Season description
+</ResponseField>
+
+<ResponseField name="airDate" type="string">
+  Season premiere date
+</ResponseField>
+
+<ResponseField name="posterPath" type="string">
+  Season poster URL
+</ResponseField>
+
+<ResponseField name="episodeCount" type="number">
+  Number of episodes
+</ResponseField>
+
+<ResponseField name="voteAverage" type="number">
+  Average episode rating
+</ResponseField>
+
+<ResponseField name="episodes" type="array" required>
+  Array of episode objects
+</ResponseField>
+
+**Episode fields:**
+- `episodeNumber` - Episode number
+- `name` - Episode title
+- `overview` - Episode description
+- `airDate` - Air date
+- `runtime` - Duration in minutes
+- `stillPath` - Episode still image URL
+- `voteAverage` - TMDB rating
+- `crew` - Directors and writers (up to 4)
+- `guestStars` - Guest stars (up to 5)
+
+**Caching:**
+- Recent seasons (aired within 6 months): 7 days
+- Archive seasons: 180 days
+
+**Rate limiting:** 30 requests per minute per user.
+
+## Caching Strategy
+
+The Shows API uses multiple cache tables:
+
+### tmdbDetailsCache
+
+Caches extended show details and season information.
+
+**TTL:**
+- Show details: 7 days
+- Recent seasons: 7 days
+- Archive seasons: 180 days
+
+### tmdbSearchCache
+
+Caches TMDB search results for 24 hours.
+
+### tmdbListCache
+
+Caches curated list results for 24 hours.
+
+## Example Usage
+
+### Search Shows
+
+```typescript
+import { useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function ShowSearch({ query }: { query: string }) {
+  const results = useQuery(
+    api.shows.search,
+    query ? { text: query, limit: 20 } : "skip"
+  );
+  
+  return (
+    <div>
+      {results?.map(show => (
+        <ShowCard key={show._id} show={show} />
+      ))}
+    </div>
+  );
+}
+```
+
+### Semantic Search
+
+```typescript
+import { useAction } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function SmartSearch() {
+  const search = useAction(api.shows.searchCatalog);
+  
+  const handleSearch = async (query: string) => {
+    const results = await search({ text: query });
+    // Results ranked by semantic relevance
+    console.log(results);
+  };
+  
+  return <SearchBar onSubmit={handleSearch} />;
+}
+```
+
+### Get Show Details
+
+```typescript
+import { useAction } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function ShowDetails({ tmdbId }: { tmdbId: string }) {
+  const [details, setDetails] = useState(null);
+  const getDetails = useAction(api.shows.getExtendedDetails);
+  
+  useEffect(() => {
+    getDetails({ externalId: tmdbId }).then(setDetails);
+  }, [tmdbId]);
+  
+  if (!details) return <Loading />;
+  
+  return (
+    <div>
+      <h1>{details.tagline}</h1>
+      <p>Seasons: {details.numberOfSeasons}</p>
+      <WatchProviders providers={details.watchProviders} />
+      <Cast cast={details.cast} />
+    </div>
+  );
+}
+```
+
+### Import Show
+
+```typescript
+import { useAction } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function AddToDatabase({ tmdbId }: { tmdbId: string }) {
+  const ingest = useAction(api.shows.ingestFromCatalog);
+  
+  const handleAdd = async () => {
+    const showId = await ingest({
+      externalSource: "tmdb",
+      externalId: tmdbId,
+    });
+    console.log("Show added:", showId);
+  };
+  
+  return <button onClick={handleAdd}>Add to Database</button>;
+}
+```

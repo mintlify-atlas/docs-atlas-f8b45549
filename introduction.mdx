@@ -1,0 +1,123 @@
+---
+title: Introduction
+description: Welcome to Plotlist - a TV-first social tracking and discovery app
+---
+
+# Welcome to Plotlist
+
+Plotlist is a **TV-first social tracking and discovery app** built with Expo, React Native, and Convex. It's designed as a social companion for television, helping users track what they're watching, connect with friends, and discover their next favorite show.
+
+<Note>
+  Plotlist is exclusively focused on TV shows and episodes - not movies. The entire catalog and recommendation system is optimized around television content.
+</Note>
+
+## What is Plotlist?
+
+Plotlist combines personal tracking, social discovery, and release planning into a unified experience for TV enthusiasts. Whether you're managing your watchlist, logging episodes, writing reviews, or discovering shows through friends, Plotlist provides the tools you need.
+
+<CardGroup cols={2}>
+  <Card title="Track Your Shows" icon="tv">
+    Organize shows across watchlist, watching, completed, and dropped states. Log episodes with notes and track your progress.
+  </Card>
+  <Card title="Social Discovery" icon="users">
+    Follow friends, browse their profiles and lists, and see what they're watching. Connect through privacy-preserving contact sync.
+  </Card>
+  <Card title="Smart Recommendations" icon="sparkles">
+    Get AI-assisted recommendations powered by Gemini embeddings, similar-show suggestions, and taste-match social proof.
+  </Card>
+  <Card title="Release Calendar" icon="calendar">
+    Browse upcoming episodes, premieres, returns, and finales. Filter by streaming provider to plan your viewing.
+  </Card>
+</CardGroup>
+
+## Key Features
+
+### Tracking & Logging
+
+- **Watch States**: Track shows across `watchlist`, `watching`, `completed`, and `dropped`
+- **Episode Logging**: Log watched episodes with optional notes and timestamps
+- **Progress Tracking**: Automatically track your progress through seasons and episodes
+- **Ratings & Reviews**: Rate and review shows or individual episodes
+
+### Social Features
+
+- **User Profiles**: Public profiles with follower/following counts, watch stats, and curated lists
+- **Activity Feed**: Personalized home feed showing reviews and watch logs from followed users
+- **Lists**: Create ranked public or private lists of shows with cover images
+- **Engagement**: Like, comment on, and share user-generated content
+- **Contact Discovery**: Find friends through privacy-preserving contact sync with hashed phone numbers
+
+### Discovery & Recommendations
+
+- **Personalized Rails**: Trending shows, most-reviewed content, and provider-specific recommendations
+- **AI Recommendations**: Taste-based suggestions generated from embeddings and preference signals
+- **Similar Shows**: Discover shows similar to ones you love
+- **Semantic Search**: Search with freeform prompts like "comfort comedy" or "slow-burn sci-fi"
+- **Provider Filtering**: Browse content from Netflix, Apple TV, Hulu, Disney+, Max, and Prime Video
+
+### Release Planning
+
+- **Release Calendar**: View upcoming episodes from your tracked shows
+- **Filtered Views**: See tonight's episodes, premieres, returning seasons, and finales
+- **Provider Filtering**: Filter calendar by streaming service
+- **Background Sync**: Automatic refresh and caching of release data
+
+## Tech Stack
+
+### Frontend
+
+- **Expo + React Native**: Cross-platform mobile development
+- **Expo Router**: File-based routing and navigation
+- **NativeWind**: Tailwind CSS for React Native
+- **React Native Reanimated**: Smooth animations and interactions
+- **FlashList**: High-performance lists for large feeds
+
+### Backend
+
+- **Convex**: Realtime database, queries, mutations, actions, and cron jobs
+- **Convex Auth**: Phone number authentication with Twilio Verify OTP
+- **TMDB**: External show metadata, search, and release data
+- **Gemini**: Embeddings for personalized recommendations and semantic search
+
+## Core Data Model
+
+Plotlist's backend is built on Convex with the following key domains:
+
+- **Users**: Profiles, onboarding, visibility settings, and account management
+- **Shows**: TMDB ingestion, catalog search, metadata caching, and provider links
+- **Watch States**: User tracking states (watchlist, watching, completed, dropped)
+- **Watch Logs**: Episode and show watch history with timestamps and notes
+- **Reviews**: User reviews with ratings, likes, and comments
+- **Lists**: User-curated collections with drag-and-drop reordering
+- **Feed**: Social activity feed aggregating reviews and logs
+- **Release Calendar**: Cached future episode data and personalized calendar views
+- **Embeddings**: Taste profiles, recommendation rails, and semantic search
+
+## Who is Plotlist For?
+
+<CardGroup cols={2}>
+  <Card title="TV Enthusiasts" icon="popcorn">
+    Track your shows, log episodes, and never lose track of where you left off in a series.
+  </Card>
+  <Card title="Social Viewers" icon="comment">
+    Share your thoughts through reviews, discover what friends are watching, and get recommendations based on shared taste.
+  </Card>
+  <Card title="List Curators" icon="list">
+    Build and share themed lists of shows, from comfort watches to hidden gems.
+  </Card>
+  <Card title="Release Planners" icon="clock">
+    Stay on top of new episodes, premieres, and season returns with the integrated calendar.
+  </Card>
+</CardGroup>
+
+## Get Started
+
+Ready to dive in? Head over to the [Quickstart](/quickstart) guide to get Plotlist running locally in minutes.
+
+<Card title="Quickstart" icon="rocket" href="/quickstart">
+  Clone the repo, set up Convex, and run Plotlist on your device or simulator.
+</Card>
+
+## License
+
+Plotlist is licensed under **PolyForm-Noncommercial-1.0.0**. Non-commercial use is allowed under the terms in the LICENSE file.

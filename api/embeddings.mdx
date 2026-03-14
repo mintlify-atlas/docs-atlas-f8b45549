@@ -1,0 +1,539 @@
+---
+title: 'Embeddings API'
+description: 'AI-powered semantic search, recommendations, and taste matching'
+---
+
+## Overview
+
+The Embeddings API powers Plotlist's AI features using Google Gemini embeddings for semantic search, personalized recommendations, and user taste matching.
+
+## Architecture
+
+**Model:** `gemini-embedding-2-preview` (configurable)
+
+**Dimensions:** 1536
+
+**Embedding Types:**
+- `SEMANTIC_SIMILARITY` - For taste profiles and similarity matching
+- `RETRIEVAL_DOCUMENT` - For show catalog indexing
+- `RETRIEVAL_QUERY` - For user search queries
+
+## Show Embeddings
+
+### Vector Indexes
+
+Two vector indexes power different search modes:
+
+#### by_similarity_embedding
+
+Used for "shows like this" recommendations.
+
+```typescript
+vectorIndex("by_similarity_embedding", {
+  vectorField: "similarityEmbedding",
+  dimensions: 1536,
+  filterFields: ["embeddingVersion"],
+})
+```
+
+#### by_retrieval_embedding
+
+Used for natural language search queries.
+
+```typescript
+vectorIndex("by_retrieval_embedding", {
+  vectorField: "retrievalEmbedding",
+  dimensions: 1536,
+  filterFields: ["embeddingVersion"],
+})
+```
+
+### Queries
+
+No direct public queries - embeddings are accessed through actions.
+
+### Actions
+
+#### searchShows
+
+Hybrid semantic + lexical search.
+
+```typescript
+export const searchShows = action({
+  args: {
+    text: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="text" type="string" required>
+  Natural language search query
+</ParamField>
+
+<ParamField path="limit" type="number">
+  Maximum results (1-20, default 12)
+</ParamField>
+
+**Returns:** Array of search results with:
+
+<ResponseField name="_id" type="Id<'shows'>">
+  Show ID (if in database)
+</ResponseField>
+
+<ResponseField name="externalSource" type="string" required>
+  External source ("tmdb")
+</ResponseField>
+
+<ResponseField name="externalId" type="string" required>
+  TMDB show ID
+</ResponseField>
+
+<ResponseField name="title" type="string" required>
+  Show title
+</ResponseField>
+
+<ResponseField name="matchLabel" type="string">
+  Match type ("Exact match", "Vibe match", "Like {show}", etc.)
+</ResponseField>
+
+<ResponseField name="lexicalScore" type="number">
+  Full-text search score
+</ResponseField>
+
+<ResponseField name="semanticScore" type="number">
+  Vector similarity score
+</ResponseField>
+
+**Features:**
+
+<Expandable title="Pattern Matching">
+  Recognizes patterns like:
+  - `"shows like Breaking Bad"` - Finds similar shows
+  - `"shows like Breaking Bad but funny"` - Finds similar shows with modifiers
+  - `"dystopian sci-fi"` - Genre-aware search
+  - `"cozy mystery"` - Vibe-based search
+</Expandable>
+
+<Expandable title="Ranking Strategy">
+  Hybrid ranking combines:
+  - **Exact title matches** - Highest priority
+  - **Prefix matches** - High priority for partial titles
+  - **Semantic similarity** - Vector search score
+  - **Token coverage** - How many query words match
+  - **Genre intent** - Detected genre keywords
+  - **Popularity** - TMDB popularity score
+  - **TMDB fallback** - Direct API search for missing shows
+</Expandable>
+
+**Rate limiting:** 40 searches per minute per user.
+
+#### getSimilarShows
+
+Find shows similar to a given show.
+
+```typescript
+export const getSimilarShows = action({
+  args: {
+    showId: v.id("shows"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="showId" type="Id<'shows'>" required>
+  Seed show for similarity search
+</ParamField>
+
+<ParamField path="limit" type="number">
+  Maximum results (1-20, default 10)
+</ParamField>
+
+**Returns:** Array of similar shows with:
+
+<ResponseField name="showId" type="Id<'shows'>" required>
+  Similar show ID
+</ResponseField>
+
+<ResponseField name="title" type="string" required>
+  Show title
+</ResponseField>
+
+<ResponseField name="sharedGenres" type="string[]" required>
+  Genres in common with seed show
+</ResponseField>
+
+<ResponseField name="score" type="number" required>
+  Similarity score (higher = more similar)
+</ResponseField>
+
+**Scoring:**
+- Base: Vector similarity score
+- Bonus: +12% per genre overlap
+- Bonus: Up to +8% for high TMDB rating
+
+## User Taste Profiles
+
+### Schema
+
+```typescript
+type UserTasteProfile = {
+  userId: Id<"users">;
+  embeddingVersion: string;
+  signalFingerprint: string; // Hash of source signals
+  favoriteShowIds: Id<"shows">[];
+  favoriteThemes: string[];
+  positiveShowIds: Id<"shows">[]; // High ratings, completed
+  negativeShowIds: Id<"shows">[]; // Dropped, low ratings
+  similarityEmbedding: number[]; // 1536-dim taste vector
+};
+```
+
+### Signal Weights
+
+User signals are weighted to build taste profile:
+
+```typescript
+const weights = {
+  completed: +1.15,
+  watching: +0.9,
+  watchlist: +0.4,
+  dropped: -1.25,
+  favoriteShow: +1.75,
+  rating: (rating - 2.5) / 1.6, // Normalized rating
+};
+```
+
+### Actions
+
+#### getPersonalizedRecommendations
+
+Get AI-powered recommendations for authenticated user.
+
+```typescript
+export const getPersonalizedRecommendations = action({
+  args: {
+    limit: v.optional(v.number()),
+    theme: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="limit" type="number">
+  Maximum recommendations (default 12)
+</ParamField>
+
+<ParamField path="theme" type="string">
+  Optional theme to guide recommendations (e.g., "dark fantasy")
+</ParamField>
+
+**Returns:** Array of recommendations:
+
+<ResponseField name="showId" type="Id<'shows'>" required>
+  Recommended show ID
+</ResponseField>
+
+<ResponseField name="title" type="string" required>
+  Show title
+</ResponseField>
+
+<ResponseField name="reason" type="string" required>
+  Why this was recommended
+</ResponseField>
+
+<ResponseField name="score" type="number" required>
+  Recommendation strength
+</ResponseField>
+
+**Caching:**
+- Results cached for 6 hours per theme
+- Cache invalidated when user rates/tracks shows
+- Separate cache per theme (e.g., "dark fantasy", "comfort shows")
+
+**Algorithm:**
+1. Collect user signals (watch states, reviews, favorites)
+2. Build weighted taste vector from positive/negative shows
+3. Vector search for similar shows
+4. Apply theme-based adjustments if provided
+5. Boost shows with matching genres
+6. Filter out already-watched shows
+7. Rank by combined score
+
+#### getRecommendationRails
+
+Get multiple recommendation categories.
+
+```typescript
+export const getRecommendationRails = action({
+  args: { themes: v.optional(v.array(v.string())) },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Returns:** Array of recommendation rails:
+
+<ResponseField name="key" type="string" required>
+  Rail identifier
+</ResponseField>
+
+<ResponseField name="title" type="string" required>
+  Rail display title
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Rail description
+</ResponseField>
+
+<ResponseField name="items" type="array" required>
+  Recommended shows for this rail
+</ResponseField>
+
+## Taste Matching
+
+### Actions
+
+#### getTasteMatch
+
+Calculate taste compatibility between users.
+
+```typescript
+export const getTasteMatch = action({
+  args: { otherUserId: v.id("users") },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="otherUserId" type="Id<'users'>" required>
+  User to compare taste with
+</ParamField>
+
+**Returns:**
+
+<ResponseField name="percent" type="number" required>
+  Taste match percentage (1-99)
+</ResponseField>
+
+<ResponseField name="sharedFavoriteShows" type="array" required>
+  Shows both users have as favorites
+</ResponseField>
+
+**Calculation:**
+- Compares user taste profile vectors
+- Uses cosine similarity
+- Normalized to 1-99% range
+- Boosts score for shared favorites
+
+#### findSimilarUsers
+
+Find users with similar taste.
+
+```typescript
+export const findSimilarUsers = action({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Returns:** Array of user taste matches with:
+- User preview
+- Taste match percentage
+- Shared favorite shows
+
+## Embedding Jobs
+
+Background jobs to generate embeddings for the catalog.
+
+### Actions
+
+#### startEmbeddingBackfill
+
+Start a job to embed all shows.
+
+```typescript
+export const startEmbeddingBackfill = internalAction({
+  args: {},
+  handler: async (ctx) => { ... },
+});
+```
+
+**Returns:** `{ jobId, status: "queued" }`
+
+**Process:**
+1. Counts total TMDB shows
+2. Creates job document
+3. Processes in batches of 20
+4. Generates similarity + retrieval embeddings
+5. Updates job progress
+6. Schedules next batch until complete
+
+### Queries
+
+#### getLatestEmbeddingJob
+
+Get status of most recent embedding job.
+
+```typescript
+export const getLatestEmbeddingJob = internalQuery({
+  args: {},
+  handler: async (ctx) => { ... },
+});
+```
+
+**Returns:** Job document with:
+- `status` - "queued" | "running" | "completed" | "failed"
+- `processedCount` - Shows processed
+- `embeddedCount` - Embeddings created
+- `skippedCount` - Already up-to-date
+
+## Example Usage
+
+### Semantic Search
+
+```typescript
+import { useAction } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function SmartSearch() {
+  const search = useAction(api.embeddings.searchShows);
+  
+  const handleSearch = async (query: string) => {
+    const results = await search({ text: query, limit: 12 });
+    
+    // Results include matchLabel for display
+    results.forEach(result => {
+      console.log(`${result.title} - ${result.matchLabel}`);
+    });
+  };
+  
+  return (
+    <SearchBar 
+      onSearch={handleSearch}
+      placeholder="Try 'shows like Breaking Bad but funny'"
+    />
+  );
+}
+```
+
+### Similar Shows
+
+```typescript
+import { useAction } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function SimilarShows({ showId }: { showId: Id<"shows"> }) {
+  const [similar, setSimilar] = useState([]);
+  const getSimilar = useAction(api.embeddings.getSimilarShows);
+  
+  useEffect(() => {
+    getSimilar({ showId, limit: 10 }).then(setSimilar);
+  }, [showId]);
+  
+  return (
+    <div>
+      <h3>Similar Shows</h3>
+      {similar.map(item => (
+        <ShowCard
+          key={item.showId}
+          show={item}
+          subtitle={`${item.sharedGenres.join(", ")} · ${Math.round(item.score * 100)}% match`}
+        />
+      ))}
+    </div>
+  );
+}
+```
+
+### Personalized Recommendations
+
+```typescript
+import { useAction } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function ForYou() {
+  const getRecs = useAction(api.embeddings.getPersonalizedRecommendations);
+  const [recs, setRecs] = useState([]);
+  
+  useEffect(() => {
+    getRecs({ limit: 20 }).then(setRecs);
+  }, []);
+  
+  return (
+    <div>
+      <h2>Recommended For You</h2>
+      {recs.map(rec => (
+        <RecommendationCard
+          key={rec.showId}
+          show={rec}
+          reason={rec.reason}
+        />
+      ))}
+    </div>
+  );
+}
+```
+
+### Themed Recommendations
+
+```typescript
+import { useAction } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function ThemedRails() {
+  const getRails = useAction(api.embeddings.getRecommendationRails);
+  const [rails, setRails] = useState([]);
+  
+  useEffect(() => {
+    getRails({ 
+      themes: [
+        "dark fantasy",
+        "comfort shows",
+        "mind-bending mysteries",
+      ]
+    }).then(setRails);
+  }, []);
+  
+  return (
+    <div>
+      {rails.map(rail => (
+        <div key={rail.key}>
+          <h3>{rail.title}</h3>
+          <p>{rail.description}</p>
+          <ShowCarousel shows={rail.items} />
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+### Taste Match
+
+```typescript
+import { useAction } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function TasteMatchBadge({ userId }: { userId: Id<"users"> }) {
+  const [match, setMatch] = useState(null);
+  const getMatch = useAction(api.embeddings.getTasteMatch);
+  
+  useEffect(() => {
+    getMatch({ otherUserId: userId }).then(setMatch);
+  }, [userId]);
+  
+  if (!match) return null;
+  
+  return (
+    <div className="taste-match">
+      <span className="percent">{match.percent}% Taste Match</span>
+      {match.sharedFavoriteShows.length > 0 && (
+        <div className="shared">
+          Both love: {match.sharedFavoriteShows.map(s => s.title).join(", ")}
+        </div>
+      )}
+    </div>
+  );
+}
+```

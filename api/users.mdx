@@ -1,0 +1,408 @@
+---
+title: 'Users API'
+description: 'User profile management, authentication, and account operations'
+---
+
+## Overview
+
+The Users API handles user profiles, onboarding, profile visibility settings, data export, and account deletion. All operations use Convex Auth for authentication.
+
+## Queries
+
+### me
+
+Get the current authenticated user.
+
+```typescript
+export const me = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return null;
+    return await ctx.db.get(userId);
+  },
+});
+```
+
+**Returns:** Current user document or `null` if not authenticated.
+
+### profile
+
+Get detailed profile information for a user.
+
+```typescript
+export const profile = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="userId" type="Id<'users'>" required>
+  User ID to fetch profile for
+</ParamField>
+
+**Returns:**
+
+<ResponseField name="user" type="PublicUser" required>
+  Public user information (excludes sensitive fields)
+</ResponseField>
+
+<ResponseField name="avatarUrl" type="string | null">
+  Avatar image URL from storage
+</ResponseField>
+
+<ResponseField name="counts" type="object" required>
+  Activity counters (followers, following, reviews, etc.)
+</ResponseField>
+
+<ResponseField name="favoriteShows" type="array">
+  User's favorite shows (if visible to viewer)
+</ResponseField>
+
+<ResponseField name="currentlyWatching" type="array">
+  Shows marked as "watching" (if visible)
+</ResponseField>
+
+<ResponseField name="watchlistPreview" type="array">
+  Preview of watchlist shows (if visible)
+</ResponseField>
+
+<ResponseField name="topRated" type="array">
+  Top 5 rated shows by this user
+</ResponseField>
+
+<ResponseField name="averageRating" type="number | null">
+  Average rating across all reviews
+</ResponseField>
+
+<ResponseField name="permissions" type="object" required>
+  Section visibility flags based on profile settings
+</ResponseField>
+
+<ResponseField name="relationship" type="object | null">
+  Relationship with viewer (following, mutual, in contacts)
+</ResponseField>
+
+### search
+
+Search for users by username or display name.
+
+```typescript
+export const search = query({
+  args: { 
+    text: v.string(), 
+    limit: v.optional(v.number()) 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="text" type="string" required>
+  Search query (minimum 2 characters)
+</ParamField>
+
+<ParamField path="limit" type="number">
+  Maximum results (1-30, default 12)
+</ParamField>
+
+**Returns:** Array of user previews sorted by relevance (contacts first, then mutual follows).
+
+### suggested
+
+Get suggested users to follow.
+
+```typescript
+export const suggested = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="limit" type="number">
+  Maximum suggestions (1-20, default 6)
+</ParamField>
+
+**Returns:** Array of user previews sorted by:
+1. Contact matches
+2. Mutual followers count
+3. Whether they follow you
+
+### exportData
+
+Export all user data for GDPR compliance.
+
+```typescript
+export const exportData = query({
+  args: {},
+  handler: async (ctx) => { ... },
+});
+```
+
+**Returns:**
+
+<ResponseField name="user" type="object" required>
+  Complete user document
+</ResponseField>
+
+<ResponseField name="follows" type="array" required>
+  All follow relationships
+</ResponseField>
+
+<ResponseField name="reviews" type="array" required>
+  All reviews (up to 1000)
+</ResponseField>
+
+<ResponseField name="logs" type="array" required>
+  All watch logs
+</ResponseField>
+
+<ResponseField name="lists" type="array" required>
+  All lists and their items
+</ResponseField>
+
+<ResponseField name="likes" type="array" required>
+  All likes
+</ResponseField>
+
+<ResponseField name="comments" type="array" required>
+  All comments
+</ResponseField>
+
+<ResponseField name="contacts" type="array" required>
+  Contact sync entries
+</ResponseField>
+
+<ResponseField name="truncated" type="object" required>
+  Flags indicating if any data was truncated at export limit
+</ResponseField>
+
+### getFavoriteShows
+
+Get authenticated user's favorite shows.
+
+```typescript
+export const getFavoriteShows = query({
+  args: {},
+  handler: async (ctx) => { ... },
+});
+```
+
+**Returns:** Array of up to 4 show objects with `_id`, `title`, `posterUrl`, `year`.
+
+## Mutations
+
+### ensureProfile
+
+Create or update user profile on login.
+
+```typescript
+export const ensureProfile = mutation({
+  args: {
+    username: v.optional(v.string()),
+    displayName: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="username" type="string">
+  Desired username (sanitized to alphanumeric + underscore)
+</ParamField>
+
+<ParamField path="displayName" type="string">
+  Display name for profile
+</ParamField>
+
+**Returns:** User ID
+
+**Errors:**
+- `"Not authenticated"` - No valid session
+- `"Username already taken"` - Username conflict
+
+### updateProfile
+
+Update user profile information.
+
+```typescript
+export const updateProfile = mutation({
+  args: {
+    displayName: v.optional(v.string()),
+    bio: v.optional(v.string()),
+    username: v.optional(v.string()),
+    avatarStorageId: v.optional(v.id("_storage")),
+    favoriteShowIds: v.optional(v.array(v.id("shows"))),
+    favoriteGenres: v.optional(v.array(v.string())),
+    profileVisibility: v.optional(ProfileVisibility),
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="displayName" type="string">
+  New display name
+</ParamField>
+
+<ParamField path="bio" type="string">
+  Profile biography
+</ParamField>
+
+<ParamField path="username" type="string">
+  New username (must be unique)
+</ParamField>
+
+<ParamField path="avatarStorageId" type="Id<'_storage'>">
+  Uploaded avatar file ID
+</ParamField>
+
+<ParamField path="favoriteShowIds" type="Id<'shows'>[]">
+  Up to 4 favorite show IDs
+</ParamField>
+
+<ParamField path="favoriteGenres" type="string[]">
+  Up to 5 favorite genre names
+</ParamField>
+
+<ParamField path="profileVisibility" type="ProfileVisibility">
+  Privacy settings for profile sections
+</ParamField>
+
+**Returns:** `void`
+
+**Errors:**
+- `"Not authenticated"`
+- `"Username already taken"`
+
+### setOnboardingStep
+
+Update user's onboarding progress.
+
+```typescript
+export const setOnboardingStep = mutation({
+  args: { 
+    step: v.union(
+      v.literal("profile"),
+      v.literal("follow"),
+      v.literal("shows"),
+      v.literal("complete"),
+    ) 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="step" type="'profile' | 'follow' | 'shows' | 'complete'" required>
+  Onboarding step to set
+</ParamField>
+
+When `step` is `"complete"`, sets `onboardingCompletedAt` timestamp.
+
+### deleteAccount
+
+Permanently delete user account and all associated data.
+
+```typescript
+export const deleteAccount = mutation({
+  args: {},
+  handler: async (ctx) => { ... },
+});
+```
+
+**Returns:** `{ success: true }`
+
+**Deletes:**
+- User document
+- All watch states, logs, and episode progress
+- All reviews
+- All lists and list items
+- All likes and comments
+- All follow relationships (as follower and followee)
+- All feed items
+- All contact sync entries
+- Avatar and list cover images from storage
+
+## Profile Visibility
+
+Profile visibility settings control who can see different sections:
+
+```typescript
+type ProfileVisibility = {
+  favorites: "public" | "followers" | "mutuals" | "private";
+  watchlist: "public" | "followers" | "mutuals" | "private";
+  currentlyWatching: "public" | "followers" | "mutuals" | "private";
+};
+```
+
+**Visibility levels:**
+- `public` - Anyone can see
+- `followers` - Only followers can see
+- `mutuals` - Only mutual follows can see
+- `private` - Only the user can see
+
+**Default settings:**
+```typescript
+const DEFAULT_PROFILE_VISIBILITY = {
+  favorites: "public",
+  watchlist: "public",
+  currentlyWatching: "followers",
+};
+```
+
+## Example Usage
+
+### Get Current User
+
+```typescript
+import { useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function ProfileButton() {
+  const user = useQuery(api.users.me);
+  
+  if (!user) return <LoginButton />;
+  
+  return (
+    <div>
+      {user.displayName} (@{user.username})
+    </div>
+  );
+}
+```
+
+### Update Profile
+
+```typescript
+import { useMutation } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function EditProfile() {
+  const updateProfile = useMutation(api.users.updateProfile);
+  
+  const handleSubmit = async (bio: string) => {
+    await updateProfile({ bio });
+  };
+  
+  return <form onSubmit={handleSubmit}>...</form>;
+}
+```
+
+### Search Users
+
+```typescript
+import { useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function UserSearch({ query }: { query: string }) {
+  const results = useQuery(
+    api.users.search,
+    query.length >= 2 ? { text: query, limit: 10 } : "skip"
+  );
+  
+  return (
+    <div>
+      {results?.map(user => (
+        <UserCard key={user.user._id} preview={user} />
+      ))}
+    </div>
+  );
+}
+```

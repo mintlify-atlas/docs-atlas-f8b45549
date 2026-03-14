@@ -1,0 +1,498 @@
+---
+title: 'Reviews API'
+description: 'User reviews and ratings for shows and episodes'
+---
+
+## Overview
+
+The Reviews API manages user reviews and ratings for both entire shows and individual episodes. Reviews support ratings from 0.5 to 5.0 stars, optional text, spoiler warnings, and integration with the social feed.
+
+## Rating Scale
+
+Ratings use a 0.5 to 5.0 scale in 0.5 increments:
+- 0.5 = Terrible
+- 1.0-2.0 = Poor to Below Average
+- 2.5-3.0 = Average to Good
+- 3.5-4.5 = Very Good to Excellent
+- 5.0 = Masterpiece
+
+## Queries
+
+### get
+
+Get a review by ID.
+
+```typescript
+export const get = query({
+  args: { reviewId: v.id("reviews") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.reviewId);
+  },
+});
+```
+
+### getDetailed
+
+Get review with author and show information.
+
+```typescript
+export const getDetailed = query({
+  args: { reviewId: v.id("reviews") },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Returns:**
+
+<ResponseField name="review" type="object" required>
+  Full review document
+</ResponseField>
+
+<ResponseField name="author" type="PublicUser">
+  Review author (public fields only)
+</ResponseField>
+
+<ResponseField name="show" type="object">
+  Show document
+</ResponseField>
+
+### listForShow
+
+Get reviews for a show.
+
+```typescript
+export const listForShow = query({
+  args: { 
+    showId: v.id("shows"), 
+    limit: v.optional(v.number()) 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="showId" type="Id<'shows'>" required>
+  Show to get reviews for
+</ParamField>
+
+<ParamField path="limit" type="number">
+  Maximum results (1-100, default 50)
+</ParamField>
+
+**Returns:** Array of review documents (show-level only, not episodes).
+
+### listForShowDetailed
+
+Get paginated reviews with author information.
+
+```typescript
+export const listForShowDetailed = query({
+  args: { 
+    showId: v.id("shows"), 
+    paginationOpts: paginationOptsValidator 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Returns:**
+
+<ResponseField name="page" type="array" required>
+  Array of `{ review, author, authorAvatarUrl }` objects
+</ResponseField>
+
+<ResponseField name="continueCursor" type="string">
+  Pagination cursor
+</ResponseField>
+
+<ResponseField name="isDone" type="boolean" required>
+  Whether there are more results
+</ResponseField>
+
+### listForUser
+
+Get reviews by a user.
+
+```typescript
+export const listForUser = query({
+  args: { 
+    userId: v.id("users"), 
+    limit: v.optional(v.number()) 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+### listForUserDetailed
+
+Get paginated user reviews with show information.
+
+```typescript
+export const listForUserDetailed = query({
+  args: { 
+    userId: v.id("users"), 
+    paginationOpts: paginationOptsValidator 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Returns:**
+
+<ResponseField name="page" type="array" required>
+  Array of `{ review, show }` objects
+</ResponseField>
+
+## Episode Rating Queries
+
+### getMyEpisodeRatings
+
+Get all episode ratings by authenticated user for a show.
+
+```typescript
+export const getMyEpisodeRatings = query({
+  args: { showId: v.id("shows") },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Returns:** Array of episode reviews for the show.
+
+### getMyEpisodeRating
+
+Get authenticated user's rating for a specific episode.
+
+```typescript
+export const getMyEpisodeRating = query({
+  args: {
+    showId: v.id("shows"),
+    seasonNumber: v.number(),
+    episodeNumber: v.number(),
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+### getEpisodeStats
+
+Get aggregate statistics for an episode.
+
+```typescript
+export const getEpisodeStats = query({
+  args: {
+    showId: v.id("shows"),
+    seasonNumber: v.number(),
+    episodeNumber: v.number(),
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Returns:**
+
+<ResponseField name="averageRating" type="number" required>
+  Average rating across all reviews
+</ResponseField>
+
+<ResponseField name="reviewCount" type="number" required>
+  Number of reviews for this episode
+</ResponseField>
+
+### listForEpisodeDetailed
+
+Get reviews for a specific episode (with text only).
+
+```typescript
+export const listForEpisodeDetailed = query({
+  args: {
+    showId: v.id("shows"),
+    seasonNumber: v.number(),
+    episodeNumber: v.number(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Returns:** Array of `{ review, author, authorAvatarUrl }` objects (only includes reviews with text).
+
+## Mutations
+
+### create
+
+Create a new show review.
+
+```typescript
+export const create = mutation({
+  args: {
+    showId: v.id("shows"),
+    rating: v.number(),
+    reviewText: v.optional(v.string()),
+    spoiler: v.boolean(),
+    seasonNumber: v.optional(v.number()),
+    episodeNumber: v.optional(v.number()),
+    episodeTitle: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="showId" type="Id<'shows'>" required>
+  Show being reviewed
+</ParamField>
+
+<ParamField path="rating" type="number" required>
+  Rating from 0.5 to 5.0 (in 0.5 increments)
+</ParamField>
+
+<ParamField path="reviewText" type="string">
+  Written review (max 5000 characters)
+</ParamField>
+
+<ParamField path="spoiler" type="boolean" required>
+  Whether review contains spoilers
+</ParamField>
+
+<ParamField path="seasonNumber" type="number">
+  Season number for episode reviews
+</ParamField>
+
+<ParamField path="episodeNumber" type="number">
+  Episode number for episode reviews
+</ParamField>
+
+<ParamField path="episodeTitle" type="string">
+  Episode title for display
+</ParamField>
+
+**Returns:** Review ID.
+
+**Constraints:**
+- One review per user per show (for show-level reviews)
+- One review per user per episode (for episode reviews)
+- Rating must be between 0.5 and 5.0
+
+**Rate limiting:** 10 reviews per hour.
+
+**Side effects:**
+- Increments user's `countsReviews`
+- Creates feed items for followers (show-level reviews only)
+- Clears user taste caches/profiles
+
+**Errors:**
+- `"Rating must be between 0.5 and 5"`
+- `"Review already exists for this show"`
+- `"Review already exists for this episode"`
+
+### rateEpisode
+
+Create or update an episode rating.
+
+```typescript
+export const rateEpisode = mutation({
+  args: {
+    showId: v.id("shows"),
+    seasonNumber: v.number(),
+    episodeNumber: v.number(),
+    episodeTitle: v.optional(v.string()),
+    rating: v.number(),
+    reviewText: v.optional(v.string()),
+    spoiler: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Returns:** Review ID.
+
+**Rate limiting:** 30 ratings per minute.
+
+Note: Episode reviews do NOT create feed items.
+
+### edit
+
+Update an existing review.
+
+```typescript
+export const edit = mutation({
+  args: {
+    reviewId: v.id("reviews"),
+    rating: v.optional(v.number()),
+    reviewText: v.optional(v.string()),
+    spoiler: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="reviewId" type="Id<'reviews'>" required>
+  Review to update
+</ParamField>
+
+<ParamField path="rating" type="number">
+  New rating (0.5 to 5.0)
+</ParamField>
+
+<ParamField path="reviewText" type="string">
+  New review text (max 5000 characters)
+</ParamField>
+
+<ParamField path="spoiler" type="boolean">
+  Update spoiler flag
+</ParamField>
+
+**Rate limiting:** 10 edits per hour.
+
+**Errors:**
+- `"Not allowed"` - User doesn't own this review
+- `"Rating must be between 0.5 and 5"`
+
+### deleteReview
+
+Delete a review.
+
+```typescript
+export const deleteReview = mutation({
+  args: { reviewId: v.id("reviews") },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Side effects:**
+- Deletes review document
+- Deletes associated feed items
+- Decrements user's `countsReviews`
+- Clears user taste artifacts
+
+### removeEpisodeRating
+
+Delete an episode rating.
+
+```typescript
+export const removeEpisodeRating = mutation({
+  args: {
+    showId: v.id("shows"),
+    seasonNumber: v.number(),
+    episodeNumber: v.number(),
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+## Example Usage
+
+### Create a Show Review
+
+```typescript
+import { useMutation } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function ReviewForm({ showId }: { showId: Id<"shows"> }) {
+  const createReview = useMutation(api.reviews.create);
+  
+  const handleSubmit = async (data: {
+    rating: number;
+    text: string;
+    hasSpoilers: boolean;
+  }) => {
+    await createReview({
+      showId,
+      rating: data.rating,
+      reviewText: data.text,
+      spoiler: data.hasSpoilers,
+    });
+  };
+  
+  return <Form onSubmit={handleSubmit} />;
+}
+```
+
+### Display Show Reviews
+
+```typescript
+import { useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function ShowReviews({ showId }: { showId: Id<"shows"> }) {
+  const reviews = useQuery(api.reviews.listForShowDetailed, {
+    showId,
+    paginationOpts: { numItems: 10, cursor: null },
+  });
+  
+  if (!reviews) return <Loading />;
+  
+  return (
+    <div>
+      {reviews.page.map(({ review, author, authorAvatarUrl }) => (
+        <ReviewCard
+          key={review._id}
+          review={review}
+          author={author}
+          avatarUrl={authorAvatarUrl}
+        />
+      ))}
+    </div>
+  );
+}
+```
+
+### Rate an Episode
+
+```typescript
+import { useMutation } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function EpisodeRating({ 
+  showId, 
+  season, 
+  episode 
+}: { 
+  showId: Id<"shows">; 
+  season: number; 
+  episode: number; 
+}) {
+  const rateEpisode = useMutation(api.reviews.rateEpisode);
+  
+  const handleRate = async (rating: number) => {
+    await rateEpisode({
+      showId,
+      seasonNumber: season,
+      episodeNumber: episode,
+      rating,
+    });
+  };
+  
+  return <StarRating onChange={handleRate} />;
+}
+```
+
+### Show Episode Stats
+
+```typescript
+import { useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function EpisodeStats({ 
+  showId, 
+  season, 
+  episode 
+}: { 
+  showId: Id<"shows">; 
+  season: number; 
+  episode: number; 
+}) {
+  const stats = useQuery(api.reviews.getEpisodeStats, {
+    showId,
+    seasonNumber: season,
+    episodeNumber: episode,
+  });
+  
+  if (!stats) return null;
+  
+  return (
+    <div>
+      <StarDisplay rating={stats.averageRating} />
+      <span>{stats.reviewCount} ratings</span>
+    </div>
+  );
+}
+```

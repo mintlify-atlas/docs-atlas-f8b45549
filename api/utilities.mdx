@@ -1,0 +1,574 @@
+---
+title: "Utilities"
+description: "Client-side utility functions for Plotlist"
+---
+
+Utility functions for common operations in the Plotlist client.
+
+## Authentication Storage
+
+### authStorage
+
+Cross-platform secure token storage for Convex Auth.
+
+```ts lib/authStorage.ts
+import { authStorage } from "../lib/authStorage";
+
+// Platform-adaptive storage
+// - Web: localStorage
+// - Native: expo-secure-store with in-memory fallback
+
+const storage: TokenStorage = {
+  getItem: (key: string) => Promise<string | null>;
+  setItem: (key: string, value: string) => Promise<void>;
+  removeItem: (key: string) => Promise<void>;
+};
+```
+
+**Key Features:**
+- Automatic platform detection (web vs native)
+- Secure keychain storage on iOS/Android
+- Graceful fallback to in-memory storage
+- Key sanitization (alphanumeric, dots, dashes, underscores only)
+
+### clearAuthTokens
+
+Clears all authentication tokens to force re-login.
+
+```ts
+export async function clearAuthTokens(): Promise<void>
+```
+
+**Usage:**
+```ts
+import { clearAuthTokens } from "../lib/authStorage";
+
+await clearAuthTokens();
+// User will need to sign in again
+```
+
+## Phone Number Utilities
+
+### formatPhoneNumber
+
+Formats US phone numbers as (XXX) XXX-XXXX while typing.
+
+```ts lib/phone.ts
+export function formatPhoneNumber(value: string): string
+```
+
+**Usage:**
+```ts
+import { formatPhoneNumber } from "../lib/phone";
+
+const formatted = formatPhoneNumber("5551234567");
+// Returns: "(555) 123-4567"
+
+const partial = formatPhoneNumber("555");
+// Returns: "555"
+```
+
+### normalizePhoneNumber
+
+Converts phone numbers to E.164 format (+1XXXXXXXXXX).
+
+```ts
+export function normalizePhoneNumber(value: string): string | null
+```
+
+**Features:**
+- Handles US 10-digit numbers
+- Handles numbers with country code
+- Returns null for invalid formats
+- Validates length (8-15 digits)
+
+**Usage:**
+```ts
+import { normalizePhoneNumber } from "../lib/phone";
+
+normalizePhoneNumber("(555) 123-4567");
+// Returns: "+15551234567"
+
+normalizePhoneNumber("+447700900123");
+// Returns: "+447700900123"
+
+normalizePhoneNumber("invalid");
+// Returns: null
+```
+
+## Date & Time Formatting
+
+### formatDate
+
+Formats timestamp as "MMM d, yyyy".
+
+```ts lib/format.ts
+export function formatDate(value: number): string
+```
+
+**Usage:**
+```ts
+formatDate(1678886400000); // "Mar 15, 2023"
+```
+
+### formatTime
+
+Formats timestamp as "h:mm a".
+
+```ts
+export function formatTime(value: number): string
+```
+
+**Usage:**
+```ts
+formatTime(1678886400000); // "2:00 PM"
+```
+
+### formatMonth
+
+Formats timestamp as "MMMM yyyy".
+
+```ts
+export function formatMonth(value: number): string
+```
+
+**Usage:**
+```ts
+formatMonth(1678886400000); // "March 2023"
+```
+
+### formatShortDate
+
+Formats timestamp as "MMM d".
+
+```ts
+export function formatShortDate(value: number): string
+```
+
+**Usage:**
+```ts
+formatShortDate(1678886400000); // "Mar 15"
+```
+
+### formatCalendarDay
+
+Formats timestamp as "EEEE, MMM d".
+
+```ts
+export function formatCalendarDay(value: number): string
+```
+
+**Usage:**
+```ts
+formatCalendarDay(1678886400000); // "Wednesday, Mar 15"
+```
+
+### formatRelativeTime
+
+Formats timestamp relative to now.
+
+```ts
+export function formatRelativeTime(value: number): string
+```
+
+**Usage:**
+```ts
+formatRelativeTime(Date.now() - 3600000); // "1 hour ago"
+formatRelativeTime(Date.now() + 86400000); // "in 1 day"
+```
+
+### formatEpisodeCode
+
+Formats season/episode as "SxxExx".
+
+```ts
+export function formatEpisodeCode(
+  seasonNumber: number,
+  episodeNumber: number
+): string
+```
+
+**Usage:**
+```ts
+formatEpisodeCode(1, 5); // "S01E05"
+formatEpisodeCode(12, 3); // "S12E03"
+```
+
+### Date Utilities
+
+```ts
+// Check if timestamp is in current month
+export function isCurrentMonth(value: number): boolean
+
+// Get start of month timestamp
+export function getMonthStart(value: number): number
+```
+
+## Contact Sync
+
+### loadDeviceContacts
+
+Loads phone contacts from device.
+
+```ts lib/deviceContacts.ts
+export type DeviceContactEntry = {
+  sourceRecordId: string;
+  displayName: string;
+  phone: string;
+};
+
+export async function loadDeviceContacts(): Promise<DeviceContactEntry[]>
+```
+
+**Features:**
+- Requests permissions automatically
+- Normalizes phone numbers
+- Deduplicates contacts
+- Handles missing/malformed data
+
+**Usage:**
+```ts
+import { loadDeviceContacts } from "../lib/deviceContacts";
+
+try {
+  const contacts = await loadDeviceContacts();
+  // Upload to server for matching
+} catch (error) {
+  // User denied permission or other error
+}
+```
+
+### getInviteReadyCount
+
+Calculates number of contacts available to invite.
+
+```ts lib/contactSync.ts
+type ContactSyncResult = {
+  totalCount: number;
+  matchedCount: number;
+  inviteCount?: number;
+  invitedCount?: number;
+};
+
+export function getInviteReadyCount(result: ContactSyncResult): number
+```
+
+### getContactSyncAlertCopy
+
+Generates user-facing messages for sync results.
+
+```ts
+export function getContactSyncAlertCopy(result: ContactSyncResult): {
+  title: string;
+  message: string;
+}
+```
+
+**Usage:**
+```ts
+import { getContactSyncAlertCopy } from "../lib/contactSync";
+
+const result = {
+  totalCount: 100,
+  matchedCount: 15,
+};
+
+const { title, message } = getContactSyncAlertCopy(result);
+// title: "Contacts synced"
+// message: "We found 15 people already on Plotlist."
+```
+
+## Preferences
+
+### getContactsSyncDismissed
+
+Checks if user dismissed contacts sync prompt.
+
+```ts lib/preferences.ts
+export async function getContactsSyncDismissed(): Promise<boolean>
+```
+
+### setContactsSyncDismissed
+
+Sets contacts sync dismissal preference.
+
+```ts
+export async function setContactsSyncDismissed(dismissed: boolean): Promise<void>
+```
+
+**Usage:**
+```ts
+import { 
+  getContactsSyncDismissed, 
+  setContactsSyncDismissed 
+} from "../lib/preferences";
+
+const isDismissed = await getContactsSyncDismissed();
+if (!isDismissed) {
+  // Show contacts sync card
+}
+
+// User dismissed the card
+await setContactsSyncDismissed(true);
+```
+
+## Release Calendar
+
+Utilities for managing the release calendar feature.
+
+### Types
+
+```ts lib/releaseCalendar.ts
+export type ReleaseCalendarView = 
+  | "tonight" 
+  | "upcoming" 
+  | "premieres" 
+  | "returning" 
+  | "finales";
+
+export type ReleaseCalendarProvider = {
+  name: string;
+  logoUrl?: string | null;
+};
+
+export type ReleaseEventRecord = {
+  showId: string;
+  airDate: string;
+  airDateTs: number;
+  seasonNumber: number;
+  episodeNumber: number;
+  episodeTitle?: string | null;
+  isPremiere: boolean;
+  isReturningSeason: boolean;
+  isSeasonFinale: boolean;
+  isSeriesFinale: boolean;
+};
+
+export type ReleaseCalendarItem = ReleaseEventRecord & {
+  show: {
+    _id: string;
+    title: string;
+    posterUrl?: string | null;
+  };
+  providers: ReleaseCalendarProvider[];
+};
+
+export type ReleaseCalendarGroup = {
+  airDate: string;
+  airDateTs: number;
+  items: ReleaseCalendarItem[];
+};
+```
+
+### Provider Options
+
+```ts
+export const RELEASE_CALENDAR_PROVIDER_OPTIONS = [
+  { key: "netflix", name: "Netflix", logoUrl: "..." },
+  { key: "apple_tv", name: "Apple TV", logoUrl: "..." },
+  { key: "max", name: "Max", logoUrl: "..." },
+  { key: "disney_plus", name: "Disney+", logoUrl: "..." },
+  { key: "hulu", name: "Hulu", logoUrl: "..." },
+  { key: "prime_video", name: "Prime Video", logoUrl: "..." },
+  { key: "peacock", name: "Peacock", logoUrl: "..." },
+] as const;
+
+export const RELEASE_CALENDAR_VIEWS = [
+  { value: "tonight", label: "Tonight" },
+  { value: "upcoming", label: "Upcoming" },
+  { value: "premieres", label: "Premieres" },
+  { value: "returning", label: "Returning" },
+  { value: "finales", label: "Finales" },
+] as const;
+```
+
+### Date Utilities
+
+```ts
+// Get local date string (YYYY-MM-DD)
+export function getLocalDateString(value?: Date): string
+
+// Get start of day timestamp
+export function getStartOfLocalDayTimestamp(value?: Date): number
+
+// Parse date string to timestamp (at noon)
+export function getDateOnlyTimestamp(value: string): number
+```
+
+### Event Utilities
+
+```ts
+// Generate event flags (premiere, finale, etc.)
+export function getReleaseEventFlags(args: {
+  seasonNumber: number;
+  episodeNumber: number;
+  lastEpisodeNumber: number;
+  maxSeasonNumber: number;
+  showStatus?: string | null;
+}): {
+  isPremiere: boolean;
+  isReturningSeason: boolean;
+  isSeasonFinale: boolean;
+  isSeriesFinale: boolean;
+}
+
+// Check if event matches view filter
+export function matchesReleaseView(
+  event: ReleaseEventRecord,
+  view: ReleaseCalendarView,
+  today: string
+): boolean
+
+// Check if show matches provider filter
+export function matchesSelectedProviders(
+  providers: ReleaseCalendarProvider[],
+  selectedProviders: string[]
+): boolean
+```
+
+### Provider Utilities
+
+```ts
+// Get all provider names
+export function getReleaseCalendarProviderNames(): string[]
+
+// Normalize provider list (validate and dedupe)
+export function normalizeSelectedProviders(
+  selectedProviders?: string[] | null
+): string[]
+```
+
+### Tracking Utilities
+
+```ts
+export type ReleaseCalendarTrackedState = {
+  showId: string;
+  status: string;
+};
+
+// Check if status is tracked (watchlist or watching)
+export function isTrackedReleaseStatus(status: string): boolean
+
+// Extract tracked show IDs from state list
+export function getTrackedShowIdsFromStates(
+  states: ReleaseCalendarTrackedState[]
+): string[]
+```
+
+### buildReleaseCalendarData
+
+Builds paginated, filtered calendar data.
+
+```ts
+export function buildReleaseCalendarData(args: {
+  shows: ReleaseCalendarShowSource[];
+  today: string;
+  view: ReleaseCalendarView;
+  selectedProviders?: string[] | null;
+  limit?: number;
+  cursor?: string | null;
+}): {
+  groups: ReleaseCalendarGroup[];
+  selectedProviders: string[];
+  totalItems: number;
+  staleShowIds: string[];
+  continueCursor: string;
+  isDone: boolean;
+}
+```
+
+**Usage:**
+```ts
+import { buildReleaseCalendarData } from "../lib/releaseCalendar";
+
+const data = buildReleaseCalendarData({
+  shows: trackedShows,
+  today: "2024-03-15",
+  view: "tonight",
+  selectedProviders: ["Netflix", "Max"],
+  limit: 25,
+  cursor: undefined,
+});
+
+// Render groups
+data.groups.forEach(group => {
+  console.log(group.airDate); // "2024-03-15"
+  group.items.forEach(item => {
+    console.log(item.show.title, `S${item.seasonNumber}E${item.episodeNumber}`);
+  });
+});
+
+// Load next page
+if (!data.isDone) {
+  const nextPage = buildReleaseCalendarData({
+    ...args,
+    cursor: data.continueCursor,
+  });
+}
+```
+
+### isReleaseSyncStateStale
+
+Checks if sync state needs refresh.
+
+```ts
+export function isReleaseSyncStateStale(
+  syncState: {
+    expiresAt?: number | null;
+    status?: string | null;
+  } | null | undefined,
+  now: number
+): boolean
+```
+
+**Usage:**
+```ts
+const needsRefresh = isReleaseSyncStateStale(syncState, Date.now());
+if (needsRefresh) {
+  // Trigger background sync
+}
+```
+
+## Best Practices
+
+### Error Handling
+
+All async utilities may throw errors - wrap in try/catch:
+
+```ts
+try {
+  const contacts = await loadDeviceContacts();
+} catch (error) {
+  console.error("Failed to load contacts:", error);
+  // Show user-friendly message
+}
+```
+
+### Platform Detection
+
+Some utilities behave differently on web vs native:
+
+```ts
+import { Platform } from "react-native";
+
+if (Platform.OS === "web") {
+  // Web-specific behavior
+} else {
+  // Native-specific behavior
+}
+```
+
+### Date Handling
+
+All date utilities use `date-fns` for consistent formatting:
+
+```ts
+import { formatDate } from "../lib/format";
+import { format } from "date-fns";
+
+// Use utility functions when available
+const formatted = formatDate(timestamp);
+
+// Use date-fns directly for custom formats
+const custom = format(new Date(timestamp), "yyyy-MM-dd");
+```

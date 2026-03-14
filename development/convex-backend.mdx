@@ -1,0 +1,693 @@
+---
+title: Convex Backend
+description: Deep dive into Plotlist's Convex backend implementation
+---
+
+## Overview
+
+Plotlist uses [Convex](https://convex.dev) as its complete backend solution. Convex provides:
+
+- **Database**: Document store with automatic indexing
+- **Functions**: Type-safe queries, mutations, and actions
+- **Real-time**: WebSocket subscriptions for live updates
+- **Scheduled Jobs**: Cron jobs for background tasks
+- **File Storage**: Built-in blob storage
+- **Vector Search**: Embeddings for recommendations
+
+## Schema Structure
+
+The database schema is defined in `convex/schema.ts` using Convex's schema builder.
+
+### Core Tables
+
+#### Users
+
+```typescript
+users: defineTable({
+  // Convex Auth fields
+  phone: v.optional(v.string()),
+  phoneHash: v.optional(v.string()),
+  email: v.optional(v.string()),
+  
+  // Profile fields
+  username: v.optional(v.string()),
+  displayName: v.optional(v.string()),
+  bio: v.optional(v.string()),
+  avatarStorageId: v.optional(v.id("_storage")),
+  
+  // Stats
+  countsFollowers: v.optional(v.number()),
+  countsFollowing: v.optional(v.number()),
+  countsReviews: v.optional(v.number()),
+  countsWatchlist: v.optional(v.number()),
+  
+  // Preferences
+  favoriteShowIds: v.optional(v.array(v.id("shows"))),
+  favoriteGenres: v.optional(v.array(v.string())),
+  profileVisibility: v.optional(ProfileVisibility),
+  
+  createdAt: v.optional(v.number()),
+  lastSeenAt: v.optional(v.number()),
+})
+  .index("email", ["email"])
+  .index("phone", ["phone"])
+  .index("by_phoneHash", ["phoneHash"])
+  .index("by_username", ["username"])
+  .searchIndex("search_users", {
+    searchField: "searchText",
+  })
+```
+
+**Key features:**
+- Phone hash for privacy-preserving contact sync
+- Full-text search on usernames and display names
+- Favorite shows and genres for recommendations
+- Granular profile visibility settings
+
+#### Shows
+
+```typescript
+shows: defineTable({
+  externalSource: v.string(),      // "tmdb"
+  externalId: v.string(),          // TMDB show ID
+  title: v.string(),
+  originalTitle: v.optional(v.string()),
+  year: v.optional(v.number()),
+  overview: v.optional(v.string()),
+  posterUrl: v.optional(v.string()),
+  backdropUrl: v.optional(v.string()),
+  genreIds: v.optional(v.array(v.number())),
+  searchText: v.string(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_external", ["externalSource", "externalId"])
+  .searchIndex("search_shows", {
+    searchField: "searchText",
+    filterFields: ["externalSource"],
+  })
+```
+
+**Key features:**
+- Composite index for external ID lookups
+- Full-text search on show titles
+- Cached TMDB metadata
+
+#### Watch States
+
+```typescript
+watchStates: defineTable({
+  userId: v.id("users"),
+  showId: v.id("shows"),
+  status: v.union(
+    v.literal("watchlist"),
+    v.literal("watching"),
+    v.literal("completed"),
+    v.literal("dropped")
+  ),
+  updatedAt: v.number(),
+})
+  .index("by_user_updatedAt", ["userId", "updatedAt"])
+  .index("by_user_show", ["userId", "showId"])
+```
+
+**Usage:**
+- Tracks user's current status for each show
+- Powers watchlist, watching, and completed sections
+- Unique per user+show pair
+
+#### Watch Logs
+
+```typescript
+watchLogs: defineTable({
+  userId: v.id("users"),
+  showId: v.id("shows"),
+  watchedAt: v.number(),
+  note: v.optional(v.string()),
+  seasonNumber: v.optional(v.number()),
+  episodeNumber: v.optional(v.number()),
+  episodeTitle: v.optional(v.string()),
+})
+  .index("by_user_watchedAt", ["userId", "watchedAt"])
+  .index("by_show_watchedAt", ["showId", "watchedAt"])
+```
+
+**Usage:**
+- Records when users watch shows/episodes
+- Supports full-show watches and individual episodes
+- Optional notes for each entry
+- Powers activity feed
+
+#### Reviews
+
+```typescript
+reviews: defineTable({
+  authorId: v.id("users"),
+  showId: v.id("shows"),
+  rating: v.number(),              // 0.5 to 5.0 in 0.5 increments
+  reviewText: v.optional(v.string()),
+  spoiler: v.boolean(),
+  seasonNumber: v.optional(v.number()),
+  episodeNumber: v.optional(v.number()),
+  createdAt: v.number(),
+  updatedAt: v.optional(v.number()),
+})
+  .index("by_show_createdAt", ["showId", "createdAt"])
+  .index("by_author_createdAt", ["authorId", "createdAt"])
+  .index("by_author_show", ["authorId", "showId"])
+```
+
+**Features:**
+- Show-level and episode-level reviews
+- Spoiler flags for content warnings
+- Used for recommendations and taste profiles
+
+### Social Tables
+
+#### Follows
+
+```typescript
+follows: defineTable({
+  followerId: v.id("users"),
+  followeeId: v.id("users"),
+  createdAt: v.number(),
+})
+  .index("by_follower_createdAt", ["followerId", "createdAt"])
+  .index("by_followee_createdAt", ["followeeId", "createdAt"])
+  .index("by_pair", ["followerId", "followeeId"])
+```
+
+#### Feed Items
+
+```typescript
+feedItems: defineTable({
+  ownerId: v.id("users"),          // Who sees this in their feed
+  actorId: v.id("users"),          // Who performed the action
+  type: v.union(v.literal("review"), v.literal("log")),
+  targetId: v.string(),
+  showId: v.id("shows"),
+  timestamp: v.number(),
+  createdAt: v.number(),
+})
+  .index("by_owner_timestamp", ["ownerId", "timestamp"])
+  .index("by_target", ["type", "targetId"])
+```
+
+**Feed generation:**
+- Created when users post reviews or logs
+- Distributed to followers' feeds
+- Ordered by timestamp for chronological display
+
+#### Contact Sync
+
+```typescript
+contactSyncEntries: defineTable({
+  ownerId: v.id("users"),
+  sourceRecordId: v.optional(v.string()),
+  displayName: v.string(),
+  contactHash: v.string(),         // Hashed phone number
+  matchedUserId: v.optional(v.id("users")),
+  invitedAt: v.optional(v.number()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_owner_updatedAt", ["ownerId", "updatedAt"])
+  .index("by_owner_contactHash", ["ownerId", "contactHash"])
+  .index("by_matchedUserId", ["matchedUserId"])
+```
+
+**Privacy-preserving design:**
+- Stores hashed phone numbers, not raw values
+- Matches users by phone hash
+- Supports invite tracking
+
+### Recommendation Tables
+
+#### Show Embeddings
+
+```typescript
+showEmbeddings: defineTable({
+  showId: v.id("shows"),
+  embeddingVersion: v.string(),
+  model: v.string(),
+  dimensions: v.number(),
+  inputText: v.string(),
+  similarityEmbedding: v.array(v.float64()),
+  retrievalEmbedding: v.array(v.float64()),
+  updatedAt: v.number(),
+})
+  .vectorIndex("by_similarity_embedding", {
+    vectorField: "similarityEmbedding",
+    dimensions: 1536,
+    filterFields: ["embeddingVersion"],
+  })
+  .vectorIndex("by_retrieval_embedding", {
+    vectorField: "retrievalEmbedding",
+    dimensions: 1536,
+    filterFields: ["embeddingVersion"],
+  })
+```
+
+**Vector search:**
+- 1536-dimensional embeddings from Gemini
+- Separate similarity and retrieval vectors
+- Fast nearest-neighbor search
+
+#### User Taste Profiles
+
+```typescript
+userTasteProfiles: defineTable({
+  userId: v.id("users"),
+  embeddingVersion: v.string(),
+  signalFingerprint: v.string(),
+  favoriteShowIds: v.array(v.id("shows")),
+  positiveShowIds: v.array(v.id("shows")),
+  negativeShowIds: v.array(v.id("shows")),
+  similarityEmbedding: v.array(v.float64()),
+  updatedAt: v.number(),
+})
+  .vectorIndex("by_similarity_embedding", {
+    vectorField: "similarityEmbedding",
+    dimensions: 1536,
+  })
+```
+
+**Personalization:**
+- Aggregates user's taste signals
+- Embeddings represent user preferences
+- Used for similar-taste user matching
+
+### Cache Tables
+
+```typescript
+tmdbDetailsCache: defineTable({
+  externalSource: v.string(),
+  externalId: v.string(),
+  payload: v.any(),
+  fetchedAt: v.number(),
+  expiresAt: v.number(),
+})
+  .index("by_external", ["externalSource", "externalId"])
+  .index("by_expiresAt", ["expiresAt"])
+```
+
+**Caching strategy:**
+- Store API responses to reduce external calls
+- TTL-based expiration
+- Background cleanup via cron jobs
+
+## Function Types
+
+### Queries
+
+Read-only, reactive data fetching:
+
+```typescript
+export const profile = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) return null;
+    
+    const reviews = await ctx.db
+      .query("reviews")
+      .withIndex("by_author_createdAt", (q) => 
+        q.eq("authorId", user._id)
+      )
+      .order("desc")
+      .take(100);
+    
+    return { user, reviews };
+  },
+});
+```
+
+**Usage in React:**
+```tsx
+const profile = useQuery(api.users.profile, { userId });
+if (!profile) return <Loading />;
+return <Profile {...profile} />;
+```
+
+**Key features:**
+- Automatically re-run when data changes
+- Components update in real-time
+- Cached and optimized by Convex
+
+### Mutations
+
+Write operations that modify data:
+
+```typescript
+export const updateProfile = mutation({
+  args: {
+    displayName: v.optional(v.string()),
+    bio: v.optional(v.string()),
+    username: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await getCurrentUserOrThrow(ctx);
+    
+    // Validate username uniqueness
+    if (args.username) {
+      const existing = await ctx.db
+        .query("users")
+        .withIndex("by_username", (q) => 
+          q.eq("username", args.username)
+        )
+        .unique();
+      
+      if (existing && existing._id !== user._id) {
+        throw new Error("Username already taken");
+      }
+    }
+    
+    await ctx.db.patch(user._id, {
+      displayName: args.displayName ?? user.displayName,
+      bio: args.bio ?? user.bio,
+      username: args.username ?? user.username,
+      lastSeenAt: Date.now(),
+    });
+  },
+});
+```
+
+**Usage in React:**
+```tsx
+const updateProfile = useMutation(api.users.updateProfile);
+
+const handleSave = async () => {
+  await updateProfile({
+    displayName: "Alice",
+    bio: "TV enthusiast",
+  });
+};
+```
+
+**Key features:**
+- Transactional writes
+- Optimistic updates
+- Automatic invalidation of affected queries
+
+### Actions
+
+Calls to external APIs and non-transactional operations:
+
+```typescript
+export const searchTMDB = action({
+  args: { query: v.string() },
+  handler: async (ctx, args) => {
+    // Check cache first
+    const cached = await ctx.runQuery(
+      internal.shows.getSearchCache,
+      { query: args.query }
+    );
+    
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.results;
+    }
+    
+    // Fetch from TMDB
+    const apiKey = process.env.TMDB_API_KEY!;
+    const url = `https://api.themoviedb.org/3/search/tv?query=${encodeURIComponent(args.query)}`;
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    const data = await response.json();
+    
+    // Cache results
+    await ctx.runMutation(
+      internal.shows.upsertSearchCache,
+      {
+        query: args.query,
+        results: data.results,
+        fetchedAt: Date.now(),
+        expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+      }
+    );
+    
+    return data.results;
+  },
+});
+```
+
+**When to use actions:**
+- External API calls (TMDB, Twilio, Gemini)
+- File uploads/downloads
+- Long-running operations
+- Non-transactional workflows
+
+### Internal Functions
+
+Backend-only functions not exposed to clients:
+
+```typescript
+export const getById = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.userId);
+  },
+});
+```
+
+**Usage:**
+```typescript
+// From another Convex function
+const user = await ctx.runQuery(
+  internal.users.getById,
+  { userId }
+);
+```
+
+## Cron Jobs
+
+Scheduled background tasks in `convex/crons.ts`:
+
+```typescript
+import { cronJobs } from "convex/server";
+import { internal } from "./_generated/api";
+
+const crons = cronJobs();
+
+// Run every 6 hours
+crons.interval(
+  "cleanup expired tmdb cache",
+  { hours: 6 },
+  internal.maintenance.cleanupTmdbCache,
+  {}
+);
+
+// Run at specific times (cron syntax)
+crons.cron(
+  "hot show catalog refresh",
+  "10 */6 * * *",  // Every 6 hours at :10
+  internal.maintenance.scheduleHotShowCatalogRefresh,
+  {}
+);
+
+// Weekly on Sunday at 9 AM
+crons.cron(
+  "full show catalog refresh",
+  "0 9 * * 0",
+  internal.maintenance.scheduleFullShowCatalogRefresh,
+  {}
+);
+
+export default crons;
+```
+
+**Active cron jobs:**
+
+<Tabs>
+  <Tab title="Cache Maintenance">
+    - **Cleanup expired TMDB cache**: Every 6 hours
+    - Removes stale search, details, and list cache entries
+  </Tab>
+  <Tab title="Catalog Refresh">
+    - **Hot show catalog**: Every 6 hours
+    - **Full catalog**: Weekly on Sunday
+    - Keeps show metadata fresh from TMDB
+  </Tab>
+  <Tab title="Episodes">
+    - **Hot episode cache**: Every 12 hours
+    - **Full episode cache**: Weekly on Sunday
+    - Updates season/episode data for active shows
+  </Tab>
+  <Tab title="Embeddings">
+    - **Hot embedding refresh**: Every 6 hours
+    - **Full embedding refresh**: Weekly on Sunday
+    - Regenerates embeddings for new shows
+  </Tab>
+  <Tab title="Release Calendar">
+    - **Tracked release refresh**: Every 6 hours
+    - Updates upcoming episode data for tracked shows
+  </Tab>
+</Tabs>
+
+## Real-time Subscriptions
+
+Queries automatically subscribe to changes:
+
+```tsx
+// Component re-renders when reviews change
+const reviews = useQuery(api.reviews.byShow, { showId });
+```
+
+**How it works:**
+1. Client subscribes to query via WebSocket
+2. Backend tracks which documents the query accessed
+3. When those documents change, backend re-runs the query
+4. Client receives updated results
+5. React component re-renders
+
+**No polling, no manual refresh needed!**
+
+## File Storage
+
+Convex provides built-in blob storage:
+
+```typescript
+// Generate upload URL
+export const generateUploadUrl = mutation({
+  handler: async (ctx) => {
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+// Store reference in database
+export const saveAvatar = mutation({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    const user = await getCurrentUserOrThrow(ctx);
+    await ctx.db.patch(user._id, {
+      avatarStorageId: args.storageId,
+    });
+  },
+});
+
+// Retrieve URL
+export const getAvatarUrl = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user?.avatarStorageId) return null;
+    return await ctx.storage.getUrl(user.avatarStorageId);
+  },
+});
+```
+
+**Usage:**
+- User avatars
+- List cover images
+- Image uploads and crops
+
+## Best Practices
+
+### Indexing
+
+<Note>
+  Always create indexes for query patterns you'll use frequently.
+</Note>
+
+```typescript
+// ❌ Slow: Full table scan
+const reviews = await ctx.db
+  .query("reviews")
+  .filter((q) => q.eq(q.field("authorId"), userId))
+  .collect();
+
+// ✅ Fast: Uses index
+const reviews = await ctx.db
+  .query("reviews")
+  .withIndex("by_author_createdAt", (q) => q.eq("authorId", userId))
+  .collect();
+```
+
+### Error Handling
+
+```typescript
+export const followUser = mutation({
+  args: { targetUserId: v.id("users") },
+  handler: async (ctx, args) => {
+    const currentUser = await getCurrentUserOrThrow(ctx);
+    
+    // Validate target exists
+    const targetUser = await ctx.db.get(args.targetUserId);
+    if (!targetUser) {
+      throw new Error("User not found");
+    }
+    
+    // Prevent self-follow
+    if (currentUser._id === targetUser._id) {
+      throw new Error("You cannot follow yourself");
+    }
+    
+    // Check if already following
+    const existing = await ctx.db
+      .query("follows")
+      .withIndex("by_pair", (q) => 
+        q.eq("followerId", currentUser._id)
+         .eq("followeeId", targetUser._id)
+      )
+      .unique();
+    
+    if (existing) {
+      throw new Error("Already following this user");
+    }
+    
+    await ctx.db.insert("follows", {
+      followerId: currentUser._id,
+      followeeId: targetUser._id,
+      createdAt: Date.now(),
+    });
+  },
+});
+```
+
+### Pagination
+
+```typescript
+export const feedItems = query({
+  args: {
+    cursor: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const user = await getCurrentUserOrThrow(ctx);
+    const limit = Math.min(args.limit ?? 20, 100);
+    
+    let query = ctx.db
+      .query("feedItems")
+      .withIndex("by_owner_timestamp", (q) => 
+        q.eq("ownerId", user._id)
+      )
+      .order("desc");
+    
+    if (args.cursor) {
+      query = query.filter((q) => 
+        q.lt(q.field("timestamp"), args.cursor!)
+      );
+    }
+    
+    const items = await query.take(limit + 1);
+    const hasMore = items.length > limit;
+    const results = items.slice(0, limit);
+    
+    return {
+      items: results,
+      nextCursor: hasMore ? results[results.length - 1].timestamp : null,
+    };
+  },
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="lock" href="/development/authentication">
+    Learn about the auth implementation
+  </Card>
+  <Card title="Convex Docs" icon="book" href="https://docs.convex.dev">
+    Official Convex documentation
+  </Card>
+</CardGroup>

@@ -1,0 +1,456 @@
+---
+title: "Release Calendar"
+description: "Track upcoming episodes, premieres, and finales with the release calendar"
+---
+
+# Release Calendar
+
+The release calendar helps users stay up-to-date with new episodes from shows they're watching or have on their watchlist.
+
+## Overview
+
+The release calendar shows:
+- Tonight's episodes
+- Upcoming episodes (next 7 days)
+- Season premieres
+- Returning seasons
+- Season and series finales
+
+<CardGroup cols={2}>
+  <Card title="Smart Tracking" icon="calendar">
+    Only shows episodes from shows users are watching or have on watchlist
+  </Card>
+  <Card title="Provider Filtering" icon="filter">
+    Filter by streaming service availability
+  </Card>
+  <Card title="Background Sync" icon="refresh">
+    Automatically refreshes episode data every 12 hours
+  </Card>
+  <Card title="180-Day Window" icon="clock">
+    Shows upcoming episodes within the next 6 months
+  </Card>
+</CardGroup>
+
+## Release Events
+
+Episode release information is stored in the `releaseEvents` table.
+
+### Release Event Structure
+
+```typescript
+releaseEvents: {
+  showId: Id<"shows">,
+  airDate: string, // "2024-03-15"
+  airDateTs: number, // Unix timestamp
+  seasonNumber: number,
+  episodeNumber: number,
+  episodeTitle?: string,
+  isPremiere: boolean,
+  isReturningSeason: boolean,
+  isSeasonFinale: boolean,
+  isSeriesFinale: boolean
+}
+```
+
+### Event Flags
+
+Events are automatically tagged based on episode metadata:
+
+<Accordion title="Event Flag Logic">
+```typescript
+function getReleaseEventFlags({
+  seasonNumber,
+  episodeNumber,
+  lastEpisodeNumber,
+  maxSeasonNumber,
+  showStatus
+}) {
+  return {
+    isPremiere: seasonNumber === 1 && episodeNumber === 1,
+    isReturningSeason: seasonNumber > 1 && episodeNumber === 1,
+    isSeasonFinale: episodeNumber === lastEpisodeNumber,
+    isSeriesFinale: 
+      showStatus === "Ended" && 
+      seasonNumber === maxSeasonNumber && 
+      episodeNumber === lastEpisodeNumber
+  };
+}
+```
+</Accordion>
+
+## Sync State Management
+
+Release data is cached and refreshed on a schedule.
+
+### Show Release Sync State
+
+```typescript
+showReleaseSyncState: {
+  showId: Id<"shows">,
+  syncedAt?: number,
+  expiresAt?: number,
+  status: "idle" | "scheduled" | "running" | "ready" | "failed",
+  lastError?: string,
+  updatedAt: number
+}
+```
+
+### Sync States
+
+<Steps>
+  <Step title="Idle">
+    No sync has occurred yet
+  </Step>
+  
+  <Step title="Scheduled">
+    Sync has been queued but not started
+  </Step>
+  
+  <Step title="Running">
+    Currently fetching and processing episode data
+  </Step>
+  
+  <Step title="Ready">
+    Fresh data available, not expired
+  </Step>
+  
+  <Step title="Failed">
+    Sync encountered an error
+  </Step>
+</Steps>
+
+### Staleness Detection
+
+```typescript
+function isReleaseSyncStateStale(syncState, now) {
+  if (!syncState) return true;
+  if (syncState.status === "failed") return true;
+  if (syncState.status === "ready" && syncState.expiresAt) {
+    return syncState.expiresAt <= now;
+  }
+  return syncState.status !== "ready";
+}
+```
+
+<Info>
+Release data expires after 12 hours to ensure calendar shows up-to-date information.
+</Info>
+
+## Background Refresh
+
+A cron job automatically refreshes stale show data.
+
+### Refresh Process
+
+<Steps>
+  <Step title="Find Stale Shows">
+    Query shows with expired or failed sync states
+  </Step>
+  
+  <Step title="Claim Shows">
+    Mark shows as "scheduled" to prevent duplicate processing
+  </Step>
+  
+  <Step title="Batch Refresh">
+    Process shows in batches of 6 to avoid rate limits
+  </Step>
+  
+  <Step title="Fetch Episode Data">
+    Query TMDB for season and episode details
+  </Step>
+  
+  <Step title="Build Events">
+    Create release event records for future episodes
+  </Step>
+  
+  <Step title="Update State">
+    Mark sync as "ready" and set expiration
+  </Step>
+</Steps>
+
+### Manual Refresh
+
+Users can manually trigger a refresh:
+
+```typescript
+const refreshForMe = useAction(api.releaseCalendar.refreshForMe);
+
+const result = await refreshForMe();
+// Returns: { scheduledCount: number }
+```
+
+## Tracked Shows
+
+Only relevant shows appear in the calendar.
+
+### Tracked Status Types
+
+```typescript
+function isTrackedReleaseStatus(status) {
+  return status === "watching" || status === "watchlist";
+}
+```
+
+<Note>
+Shows marked as "completed" or "dropped" don't appear in the release calendar.
+</Note>
+
+### Loading Tracked Shows
+
+```typescript
+async function loadTrackedReleaseShows(ctx, userId, now) {
+  // Get user's watching/watchlist shows
+  const trackedShowIds = await getTrackedShowIdsForUser(ctx, userId);
+  
+  // Load show details, sync state, and release events
+  const shows = await Promise.all(
+    trackedShowIds.map(async (showId) => {
+      const show = await ctx.db.get(showId);
+      const syncState = await getSyncStateForShow(ctx, showId);
+      const events = await ctx.db
+        .query("releaseEvents")
+        .withIndex("by_show_airDateTs", (q) => 
+          q.eq("showId", showId)
+        )
+        .collect();
+      
+      return { show, syncState, events };
+    })
+  );
+  
+  return shows;
+}
+```
+
+## Provider Filtering
+
+Users can filter the calendar by streaming services.
+
+### Provider Structure
+
+```typescript
+type ReleaseCalendarProvider = {
+  name: string, // "Netflix", "Disney+", etc.
+  logoUrl: string | null
+}
+```
+
+### Provider Preferences
+
+Stored in user preferences:
+
+```typescript
+users: {
+  releaseCalendarPreferences?: {
+    selectedProviders: string[]
+  }
+}
+```
+
+### Setting Provider Filter
+
+```typescript
+const setProviderFilter = useMutation(
+  api.releaseCalendar.setProviderFilter
+);
+
+await setProviderFilter({
+  selectedProviders: ["Netflix", "HBO Max", "Disney+"]
+});
+```
+
+### Provider Normalization
+
+```typescript
+const RELEASE_CALENDAR_PROVIDER_OPTIONS = [
+  "Netflix",
+  "Disney+",
+  "HBO Max",
+  "Amazon Prime Video",
+  "Apple TV+",
+  "Hulu",
+  "Paramount+",
+  "Peacock"
+];
+
+function normalizeSelectedProviders(providers) {
+  if (!Array.isArray(providers)) return [];
+  return providers.filter((p) => 
+    RELEASE_CALENDAR_PROVIDER_OPTIONS.includes(p)
+  );
+}
+```
+
+## Calendar Views
+
+Multiple view options for different use cases.
+
+### Available Views
+
+<CardGroup cols={2}>
+  <Card title="Tonight" icon="moon">
+    Episodes airing today
+  </Card>
+  <Card title="Upcoming" icon="calendar-days">
+    Episodes in the next 7 days
+  </Card>
+  <Card title="Premieres" icon="star">
+    Season and series premieres
+  </Card>
+  <Card title="Returning" icon="arrow-rotate-right">
+    Returning seasons (S2+)
+  </Card>
+  <Card title="Finales" icon="flag-checkered">
+    Season and series finales
+  </Card>
+</CardGroup>
+
+### Calendar Query
+
+```typescript
+const calendar = useQuery(api.releaseCalendar.listForMe, {
+  view: "tonight",
+  today: "2024-03-15",
+  limit: 20,
+  cursor: null,
+  selectedProvidersOverride: ["Netflix", "HBO Max"]
+});
+
+// Returns:
+{
+  providerOptions: string[],
+  selectedProviders: string[],
+  groups: CalendarGroup[],
+  totalItems: number,
+  staleShowIds: string[],
+  continueCursor: string | null,
+  isDone: boolean
+}
+```
+
+### Calendar Grouping
+
+Events are grouped by date:
+
+```typescript
+type CalendarGroup = {
+  date: string, // "2024-03-15"
+  label: string, // "Today", "Tomorrow", "March 17"
+  items: CalendarItem[]
+}
+
+type CalendarItem = {
+  showId: string,
+  title: string,
+  posterUrl: string | null,
+  providers: ReleaseCalendarProvider[],
+  seasonNumber: number,
+  episodeNumber: number,
+  episodeTitle: string | null,
+  airDate: string,
+  isPremiere: boolean,
+  isReturningSeason: boolean,
+  isSeasonFinale: boolean,
+  isSeriesFinale: boolean
+}
+```
+
+## Up Next Integration
+
+The calendar integrates with the "Up Next" feature.
+
+### Showing Next Air Dates
+
+When the next episode hasn't aired yet:
+
+```typescript
+type UpNextItem = {
+  showId: Id<"shows">,
+  nextSeasonNumber: number,
+  nextEpisodeNumber: number,
+  nextAirDate: number | null, // If upcoming
+  isUpcoming: boolean
+}
+```
+
+The UI displays:
+- "Airs [date]" for upcoming episodes
+- Quick-mark button disabled for upcoming episodes
+- "Ready to watch" for aired episodes
+
+## Home Preview
+
+The home screen shows a preview of the calendar.
+
+### Preview Query
+
+```typescript
+const preview = useQuery(api.releaseCalendar.getHomePreview, {
+  today: "2024-03-15"
+});
+
+// Returns:
+{
+  providerOptions: string[],
+  selectedProviders: string[],
+  tonightGroups: CalendarGroup[], // Limited to 3 items
+  upcomingGroups: CalendarGroup[], // Limited to 4 items
+  totalTonight: number,
+  totalUpcoming: number,
+  staleShowIds: string[]
+}
+```
+
+### Preview Component
+
+The `ReleaseCalendarPreview` component shows:
+- Tonight's episodes (up to 3)
+- Upcoming episodes (up to 4)
+- Link to full calendar
+- Provider filter indicators
+
+## Episode Caching
+
+Episode data is cached from TMDB for performance.
+
+### Season Cache
+
+```typescript
+// Cached as tmdbDetailsCache with special externalSource
+tmdbDetailsCache: {
+  externalSource: "tmdb-season",
+  externalId: "{showId}:season:{seasonNumber}",
+  payload: {
+    episodes: [{
+      episodeNumber: number,
+      airDate: string,
+      name: string
+    }]
+  },
+  fetchedAt: number,
+  expiresAt: number
+}
+```
+
+### Episode Cache Jobs
+
+Background job to cache season data:
+
+```typescript
+tmdbEpisodeCacheJobs: {
+  kind: "season_cache",
+  status: "queued" | "running" | "completed" | "failed",
+  targetShowCount: number,
+  batchSize: number,
+  nextOffset: number,
+  processedShowCount: number,
+  cachedSeasonCount: number,
+  skippedSeasonCount: number,
+  failedShowCount: number,
+  totalShowCount?: number
+}
+```
+
+<Info>
+Caching season data in advance makes calendar loading nearly instantaneous.
+</Info>

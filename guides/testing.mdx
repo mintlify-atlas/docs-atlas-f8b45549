@@ -1,0 +1,360 @@
+---
+title: Testing
+description: Run tests and validate code quality in Plotlist
+---
+
+Plotlist uses Jest and React Native Testing Library for unit and component testing. This guide covers running tests, understanding the test structure, and ensuring code quality.
+
+## Test Setup
+
+The testing infrastructure includes:
+
+- **Jest** - Test runner with Expo preset
+- **React Native Testing Library** - Component testing utilities
+- **jest-expo** - Expo-specific Jest configuration
+
+Configuration is in `jest.config.js`:
+
+```js jest.config.js
+module.exports = {
+  preset: "jest-expo/ios",
+  roots: ["<rootDir>/tests"],
+  setupFilesAfterEnv: ["<rootDir>/tests/setup.ts"],
+  testMatch: ["**/*.test.ts", "**/*.test.tsx"],
+  clearMocks: true,
+};
+```
+
+## Running Tests
+
+### Run all tests
+
+Execute the full test suite:
+
+```bash
+npm run test
+```
+
+This runs:
+```bash
+TZ=UTC jest --runInBand
+```
+
+<Note>
+  Tests run in UTC timezone for consistent date/time formatting across environments.
+</Note>
+
+### Watch mode
+
+Run tests in watch mode for active development:
+
+```bash
+npm run test:watch
+```
+
+This runs:
+```bash
+TZ=UTC jest --watch
+```
+
+Watch mode automatically re-runs tests when files change.
+
+### Run the full check suite
+
+Before committing, run the complete quality check:
+
+```bash
+npm run check
+```
+
+This executes:
+```bash
+npm run typecheck && npm run lint && npm run test
+```
+
+It runs:
+1. **TypeScript type checking** (`tsc --noEmit`)
+2. **ESLint** for code quality
+3. **Jest tests**
+
+<Warning>
+  Always run `npm run check` before pushing to ensure your changes pass all quality checks.
+</Warning>
+
+## Test Organization
+
+Tests are located in the `tests/` directory:
+
+```
+tests/
+├── setup.ts                        # Test environment setup
+├── format.test.ts                  # Date/time formatting utilities
+├── phone.test.ts                   # Phone number validation
+├── seasonGuide.test.ts             # Season guide logic
+├── releaseCalendar.test.ts         # Release calendar helpers
+├── contactSync.test.ts             # Contact syncing logic
+├── embeddingUtils.test.ts          # Embedding/recommendation utils
+└── components/                     # Component tests
+    ├── TextField.test.tsx
+    ├── PrimaryButton.test.tsx
+    ├── TasteMatchSummary.test.tsx
+    ├── EpisodeGuide.test.tsx
+    └── CalendarScreen.test.tsx
+```
+
+## Test Examples
+
+### Utility Function Test
+
+Example from `tests/format.test.ts`:
+
+```ts tests/format.test.ts
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  jest,
+} from "@jest/globals";
+
+import {
+  formatDate,
+  formatMonth,
+  formatRelativeTime,
+  formatShortDate,
+  formatTime,
+  getMonthStart,
+  isCurrentMonth,
+} from "../lib/format";
+
+describe("format helpers", () => {
+  const now = new Date("2026-03-10T18:30:00.000Z");
+  const referenceTimestamp = now.getTime();
+
+  beforeAll(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(now);
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
+  it("formats the core date labels used in the app", () => {
+    expect(formatDate(referenceTimestamp)).toBe("Mar 10, 2026");
+    expect(formatTime(referenceTimestamp)).toBe("6:30 PM");
+    expect(formatMonth(referenceTimestamp)).toBe("March 2026");
+    expect(formatShortDate(referenceTimestamp)).toBe("Mar 10");
+  });
+
+  it("computes relative and month-based helpers from a stable clock", () => {
+    const twoDaysAgo = new Date("2026-03-08T18:30:00.000Z").getTime();
+    const lastMonth = new Date("2026-02-28T12:00:00.000Z").getTime();
+
+    expect(formatRelativeTime(twoDaysAgo)).toBe("2 days ago");
+    expect(isCurrentMonth(twoDaysAgo)).toBe(true);
+    expect(isCurrentMonth(lastMonth)).toBe(false);
+    expect(getMonthStart(referenceTimestamp)).toBe(
+      new Date("2026-03-01T00:00:00.000Z").getTime()
+    );
+  });
+});
+```
+
+### Component Test
+
+Example from `tests/components/TextField.test.tsx`:
+
+```tsx tests/components/TextField.test.tsx
+import { describe, expect, it, jest } from "@jest/globals";
+import { fireEvent, render, screen } from "@testing-library/react-native";
+
+import { TextField } from "../../components/TextField";
+
+describe("TextField", () => {
+  it("renders label, prefix, hint, and forwards text changes", () => {
+    const onChangeText = jest.fn();
+
+    render(
+      <TextField
+        label="Username"
+        value="ethan"
+        onChangeText={onChangeText}
+        prefix="@"
+        hint="Visible on your profile"
+      />
+    );
+
+    fireEvent.changeText(screen.getByDisplayValue("ethan"), "showboxd");
+
+    expect(screen.getByText("Username")).toBeTruthy();
+    expect(screen.getByText("@")).toBeTruthy();
+    expect(screen.getByText("Visible on your profile")).toBeTruthy();
+    expect(onChangeText).toHaveBeenCalledWith("showboxd");
+  });
+
+  it("shows the validation error instead of the hint when both are provided", () => {
+    render(
+      <TextField
+        label="Phone"
+        value=""
+        onChangeText={jest.fn()}
+        hint="We use this to verify your account"
+        error="Phone number is required"
+      />
+    );
+
+    expect(screen.getByText("Phone number is required")).toBeTruthy();
+    expect(
+      screen.queryByText("We use this to verify your account")
+    ).toBeNull();
+  });
+});
+```
+
+## Writing Tests
+
+### Test Structure
+
+Follow this pattern:
+
+```ts
+import { describe, expect, it } from "@jest/globals";
+
+describe("Feature or Component Name", () => {
+  it("should do something specific", () => {
+    // Arrange: Set up test data
+    const input = "test";
+    
+    // Act: Execute the code
+    const result = myFunction(input);
+    
+    // Assert: Verify the result
+    expect(result).toBe("expected");
+  });
+});
+```
+
+### Best Practices
+
+<Steps>
+  <Step title="Use descriptive test names">
+    Test names should clearly describe what is being tested:
+    
+    ```ts
+    // Good
+    it("shows the validation error instead of the hint when both are provided", () => {});
+    
+    // Bad
+    it("works", () => {});
+    ```
+  </Step>
+  
+  <Step title="Test behavior, not implementation">
+    Focus on what the code does, not how it does it:
+    
+    ```ts
+    // Good - tests user-visible behavior
+    expect(screen.getByText("Phone number is required")).toBeTruthy();
+    
+    // Bad - tests implementation details
+    expect(component.state.errorShown).toBe(true);
+    ```
+  </Step>
+  
+  <Step title="Use fake timers for time-dependent code">
+    Stabilize time-based tests:
+    
+    ```ts
+    beforeAll(() => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date("2026-03-10T18:30:00.000Z"));
+    });
+    
+    afterAll(() => {
+      jest.useRealTimers();
+    });
+    ```
+  </Step>
+  
+  <Step title="Clean up after tests">
+    Jest config has `clearMocks: true` to automatically clear mocks between tests.
+  </Step>
+</Steps>
+
+## Running Individual Commands
+
+### TypeScript type checking
+
+```bash
+npm run typecheck
+```
+
+Runs `tsc --noEmit` to check types without generating output files.
+
+### Linting
+
+```bash
+npm run lint
+```
+
+Runs ESLint with Convex-specific rules:
+- `@convex-dev/eslint-plugin`
+- `typescript-eslint`
+
+### Testing only
+
+```bash
+npm run test
+```
+
+Runs Jest with:
+- `--runInBand` flag (runs tests serially)
+- `TZ=UTC` for consistent timezone
+
+## Continuous Integration
+
+In CI environments, always run:
+
+```bash
+npm run check
+```
+
+This ensures:
+- No TypeScript errors
+- No linting violations
+- All tests pass
+
+## Troubleshooting
+
+### Tests fail with "Cannot find module"
+
+**Solution:** Ensure all dependencies are installed:
+
+```bash
+npm install
+```
+
+### Tests pass locally but fail in CI
+
+**Possible causes:**
+- Timezone differences (tests use `TZ=UTC`)
+- Missing environment variables
+- Different Node.js versions
+
+**Solution:** Run tests with UTC timezone locally:
+
+```bash
+TZ=UTC npm test
+```
+
+### Mock not working as expected
+
+**Solution:** Check that `clearMocks: true` is in `jest.config.js`. This clears mocks between tests automatically.
+
+## Next Steps
+
+- Explore [architecture documentation](/development/architecture)
+- Learn about [Convex backend](/development/convex-backend)
+- Read about [authentication](/development/authentication)

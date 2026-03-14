@@ -1,97 +1,88 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Plotlist Documentation"
+description: "Track, discover, and share your TV watching journey"
 ---
 
-## Setting up
+<div className="bg-[#0B121B] text-[#E6E6E6] p-12 rounded-none border-0">
+  <div className="max-w-4xl mx-auto">
+    <h1 className="text-5xl font-bold mb-6 text-[#E6E6E6]">
+      Your TV tracking companion
+    </h1>
+    <p className="text-xl mb-8 text-[#E6E6E6]">
+      Plotlist is a TV-first social tracking and discovery app. Track what you're watching, 
+      log episodes, write reviews, follow friends, and get personalized recommendations based 
+      on your actual taste.
+    </p>
+    <div className="flex gap-4">
+      <a 
+        href="/quickstart" 
+        className="inline-block px-6 py-3 bg-[#00aaff] text-[#000000] font-semibold rounded-[20px] hover:opacity-90 transition-opacity"
+      >
+        Get Started
+      </a>
+      <a 
+        href="/features/tracking" 
+        className="inline-block px-6 py-3 bg-transparent text-[#5a5a5a] font-semibold border border-[#5a5a5a] rounded-none hover:border-[#E6E6E6] hover:text-[#E6E6E6] transition-colors"
+      >
+        Explore Features
+      </a>
+    </div>
+  </div>
+</div>
 
-Get your documentation site up and running in minutes.
+## Core Features
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="TV Show Tracking" icon="tv" href="/features/tracking">
+    Manage your watchlist, track what you're watching, mark shows as completed or dropped, and log individual episodes.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Social Discovery" icon="users" href="/features/social">
+    Follow friends, browse public profiles, share reviews, and engage with likes and comments on user content.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="AI Recommendations" icon="sparkles" href="/features/discovery">
+    Get personalized show recommendations powered by embeddings and taste-matching algorithms based on your viewing history.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Release Calendar" icon="calendar" href="/features/calendar">
+    Never miss an episode with a personalized calendar of upcoming releases, premieres, and season finales.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## Developer Resources
 
-Everything you need to create world-class documentation.
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Set up Plotlist locally and start developing in minutes with Expo, React Native, and Convex.
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/development/architecture">
+    Understand the technical architecture, stack, and core design decisions.
+  </Card>
+  <Card title="Convex Backend" icon="database" href="/development/convex-backend">
+    Explore the Convex backend structure including schema, queries, mutations, and actions.
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/schema">
+    Browse the complete API reference for backend tables, queries, mutations, and React components.
+  </Card>
+</CardGroup>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Key Features
 
-## Need inspiration?
+- **Episode-level tracking**: Log individual episodes with optional notes and ratings
+- **Reviews and ratings**: Rate and review shows or individual episodes with spoiler warnings
+- **Lists**: Curate public or private lists of shows with drag-and-drop reordering
+- **Contact sync**: Find friends already using Plotlist through privacy-preserving contact matching
+- **Taste profiles**: AI-generated taste profiles and similar-user matching based on viewing patterns
+- **TMDB integration**: Rich show metadata, cast information, trailers, and provider links
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
+## Built With
+
+Plotlist is built on a modern mobile-first stack:
+
+- **Expo + React Native** for cross-platform mobile development
+- **Convex** for real-time database, queries, mutations, and serverless functions
+- **TMDB API** for comprehensive TV show metadata and catalog
+- **Gemini embeddings** for AI-powered recommendations and semantic search
+- **Twilio Verify** for secure phone-based authentication
+
+<Card title="View on GitHub" icon="github" href="https://github.com/EthanMcKanna/Plotlist">
+  Explore the source code and contribute to Plotlist
 </Card>

@@ -1,0 +1,378 @@
+---
+title: 'Watch States API'
+description: 'Track user watch status for shows (watchlist, watching, completed, dropped)'
+---
+
+## Overview
+
+The Watch States API manages user watch status for TV shows, allowing users to track what they plan to watch, are currently watching, have completed, or have dropped.
+
+## Status Types
+
+```typescript
+type Status = 
+  | "watchlist"   // Planning to watch
+  | "watching"    // Currently watching
+  | "completed"   // Finished watching
+  | "dropped";    // Stopped watching
+```
+
+## Queries
+
+### listForUser
+
+Get watch states for the authenticated user.
+
+```typescript
+export const listForUser = query({
+  args: {
+    status: v.optional(Status),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="status" type="Status">
+  Filter by specific status (omit for all statuses)
+</ParamField>
+
+<ParamField path="limit" type="number">
+  Maximum results (1-100, default 50)
+</ParamField>
+
+**Returns:** Array of watch state documents ordered by `updatedAt` (most recent first).
+
+### listForUserDetailed
+
+Get watch states with full show information and sorting.
+
+```typescript
+export const listForUserDetailed = query({
+  args: {
+    status: v.optional(Status),
+    paginationOpts: paginationOptsValidator,
+    sortBy: v.optional(v.union(
+      v.literal("date"),
+      v.literal("title"),
+      v.literal("year"),
+    )),
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="status" type="Status">
+  Filter by status
+</ParamField>
+
+<ParamField path="paginationOpts" type="PaginationOptions" required>
+  Convex pagination options
+</ParamField>
+
+<ParamField path="sortBy" type="'date' | 'title' | 'year'">
+  Sort order (default: "date")
+</ParamField>
+
+**Returns:** Paginated result with:
+
+<ResponseField name="page" type="array" required>
+  Array of `{ state, show }` objects
+</ResponseField>
+
+<ResponseField name="continueCursor" type="string">
+  Cursor for next page
+</ResponseField>
+
+<ResponseField name="isDone" type="boolean" required>
+  Whether there are more results
+</ResponseField>
+
+**Sorting:**
+- `date` - By `updatedAt` descending (most recent first)
+- `title` - Alphabetically by show title
+- `year` - By show year descending (newest first)
+
+### listPublicWatchlistDetailed
+
+Get another user's watchlist (respects privacy settings).
+
+```typescript
+export const listPublicWatchlistDetailed = query({
+  args: {
+    userId: v.id("users"),
+    paginationOpts: paginationOptsValidator,
+    sortBy: v.optional(SortBy),
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="userId" type="Id<'users'>" required>
+  User whose watchlist to fetch
+</ParamField>
+
+<ParamField path="paginationOpts" type="PaginationOptions" required>
+  Convex pagination options
+</ParamField>
+
+<ParamField path="sortBy" type="'date' | 'title' | 'year'">
+  Sort order
+</ParamField>
+
+**Returns:** Paginated watchlist items.
+
+**Errors:**
+- `"User not found"`
+- `"Not allowed"` - Watchlist is private for viewer
+
+### getForShow
+
+Get authenticated user's watch state for a specific show.
+
+```typescript
+export const getForShow = query({
+  args: { showId: v.id("shows") },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="showId" type="Id<'shows'>" required>
+  Show to check status for
+</ParamField>
+
+**Returns:** Watch state document or `null` if not tracked.
+
+### getCounts
+
+Get status counts for authenticated user.
+
+```typescript
+export const getCounts = query({
+  args: {},
+  handler: async (ctx) => { ... },
+});
+```
+
+**Returns:**
+
+<ResponseField name="watchlist" type="number" required>
+  Number of shows in watchlist
+</ResponseField>
+
+<ResponseField name="watching" type="number" required>
+  Number of shows currently watching
+</ResponseField>
+
+<ResponseField name="completed" type="number" required>
+  Number of completed shows
+</ResponseField>
+
+<ResponseField name="dropped" type="number" required>
+  Number of dropped shows
+</ResponseField>
+
+<ResponseField name="total" type="number" required>
+  Total unique shows tracked
+</ResponseField>
+
+## Mutations
+
+### setStatus
+
+Set or update watch status for a show.
+
+```typescript
+export const setStatus = mutation({
+  args: { 
+    showId: v.id("shows"), 
+    status: Status 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="showId" type="Id<'shows'>" required>
+  Show to set status for
+</ParamField>
+
+<ParamField path="status" type="Status" required>
+  New watch status
+</ParamField>
+
+**Returns:** Watch state document ID.
+
+**Side effects:**
+- Creates new watch state if none exists
+- Updates existing watch state and `updatedAt` timestamp
+- Updates user activity counters (e.g., `countsWatchlist`, `countsCompleted`)
+- Clears user taste caches and profiles (for recommendations)
+
+### removeStatus
+
+Remove watch status for a show.
+
+```typescript
+export const removeStatus = mutation({
+  args: { showId: v.id("shows") },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="showId" type="Id<'shows'>" required>
+  Show to remove status for
+</ParamField>
+
+**Returns:** `void`
+
+**Side effects:**
+- Deletes watch state document
+- Decrements user activity counters
+- Clears user taste artifacts
+
+## Internal Queries
+
+### getStatesForShowByUserIds
+
+Get watch states for multiple users for a specific show.
+
+```typescript
+export const getStatesForShowByUserIds = internalQuery({
+  args: {
+    showId: v.id("shows"),
+    userIds: v.array(v.id("users")),
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+Used for social features like "Friends watching this show".
+
+## Example Usage
+
+### Display User's Watchlist
+
+```typescript
+import { useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function MyWatchlist() {
+  const watchlist = useQuery(api.watchStates.listForUserDetailed, {
+    status: "watchlist",
+    paginationOpts: { numItems: 20, cursor: null },
+    sortBy: "title",
+  });
+  
+  if (!watchlist) return <Loading />;
+  
+  return (
+    <div>
+      {watchlist.page.map(({ state, show }) => (
+        <ShowCard key={state._id} show={show} />
+      ))}
+      {!watchlist.isDone && <LoadMoreButton />}
+    </div>
+  );
+}
+```
+
+### Set Watch Status
+
+```typescript
+import { useMutation, useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function WatchStatusButton({ showId }: { showId: Id<"shows"> }) {
+  const currentStatus = useQuery(api.watchStates.getForShow, { showId });
+  const setStatus = useMutation(api.watchStates.setStatus);
+  const removeStatus = useMutation(api.watchStates.removeStatus);
+  
+  const handleStatusChange = async (newStatus: Status) => {
+    if (currentStatus?.status === newStatus) {
+      await removeStatus({ showId });
+    } else {
+      await setStatus({ showId, status: newStatus });
+    }
+  };
+  
+  return (
+    <StatusPicker
+      current={currentStatus?.status}
+      onChange={handleStatusChange}
+    />
+  );
+}
+```
+
+### Show Status Counts
+
+```typescript
+import { useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function ProfileStats() {
+  const counts = useQuery(api.watchStates.getCounts);
+  
+  if (!counts) return null;
+  
+  return (
+    <div className="stats">
+      <Stat label="Watchlist" value={counts.watchlist} />
+      <Stat label="Watching" value={counts.watching} />
+      <Stat label="Completed" value={counts.completed} />
+      <Stat label="Total Shows" value={counts.total} />
+    </div>
+  );
+}
+```
+
+### View Another User's Watchlist
+
+```typescript
+import { useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function UserWatchlist({ userId }: { userId: Id<"users"> }) {
+  const watchlist = useQuery(api.watchStates.listPublicWatchlistDetailed, {
+    userId,
+    paginationOpts: { numItems: 12, cursor: null },
+  });
+  
+  if (!watchlist) return <Loading />;
+  
+  return (
+    <div>
+      <h2>Watchlist</h2>
+      {watchlist.page.map(({ show }) => (
+        <ShowPoster key={show._id} show={show} />
+      ))}
+    </div>
+  );
+}
+```
+
+## Activity Counters
+
+Watch states automatically update user profile counters:
+
+<ResponseField name="countsWatchlist" type="number">
+  Incremented when status set to "watchlist"
+</ResponseField>
+
+<ResponseField name="countsWatching" type="number">
+  Incremented when status set to "watching"
+</ResponseField>
+
+<ResponseField name="countsCompleted" type="number">
+  Incremented when status set to "completed"
+</ResponseField>
+
+<ResponseField name="countsDropped" type="number">
+  Incremented when status set to "dropped"
+</ResponseField>
+
+<ResponseField name="countsTotalShows" type="number">
+  Incremented when any status is first set for a show
+</ResponseField>
+
+Counters are decremented when status is removed or changed.

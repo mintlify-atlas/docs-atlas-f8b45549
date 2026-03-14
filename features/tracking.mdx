@@ -1,0 +1,207 @@
+---
+title: "Tracking"
+description: "Track your TV shows with watchlist, watch status, episode progress, and watch logs"
+---
+
+# Tracking
+
+Plotlist provides comprehensive tracking features to help users manage their TV show watching journey, from watchlist to completion.
+
+## Watch Status
+
+Users can assign one of four status types to any show:
+
+<CardGroup cols={2}>
+  <Card title="Watchlist" icon="bookmark">
+    Save shows to watch later
+  </Card>
+  <Card title="Watching" icon="play">
+    Shows currently in progress
+  </Card>
+  <Card title="Completed" icon="check">
+    Finished watching all available episodes
+  </Card>
+  <Card title="Dropped" icon="x">
+    Stopped watching
+  </Card>
+</CardGroup>
+
+### Status Management
+
+The `watchStates` table tracks the relationship between users and shows:
+
+```typescript
+watchStates: {
+  userId: Id<"users">,
+  showId: Id<"shows">,
+  status: "watchlist" | "watching" | "completed" | "dropped",
+  updatedAt: number
+}
+```
+
+<Info>
+When users change a show's status, their profile counts are automatically updated (e.g., `countsWatchlist`, `countsWatching`, `countsCompleted`, `countsDropped`).
+</Info>
+
+### User Experience
+
+The `StatusSelector` component provides an intuitive interface with:
+- Visual icons and color coding for each status
+- Bottom sheet picker for status selection
+- Haptic feedback for user actions
+- Quick access to change or remove status
+
+## Episode-Level Progress
+
+Plotlist tracks individual episode progress to help users see exactly where they left off.
+
+### Episode Progress Table
+
+```typescript
+episodeProgress: {
+  userId: Id<"users">,
+  showId: Id<"shows">,
+  seasonNumber: number,
+  episodeNumber: number,
+  watchedAt: number
+}
+```
+
+### Tracking Episodes
+
+Users can:
+- Mark individual episodes as watched
+- Mark entire seasons as watched at once
+- Automatically transition from "watching" to "completed" when all available episodes are watched
+- See their total episode count and watch time statistics
+
+<Accordion title="Toggle Episode Example">
+```typescript
+const toggleEpisode = useMutation(api.episodeProgress.toggleEpisode);
+
+toggleEpisode({
+  showId: "show_123",
+  seasonNumber: 2,
+  episodeNumber: 5,
+  episodeTitle: "The One Where...",
+  createLog: true // Also creates a watch log
+});
+```
+</Accordion>
+
+### Smart Status Transitions
+
+The system automatically:
+- Moves shows from "watching" to "completed" when all aired episodes are marked as watched
+- Moves shows back to "watching" if new episodes are unmarked
+- Considers show status ("Ended" vs ongoing) when determining completion
+- Checks TMDB episode cache for accurate episode counts
+
+## Watch Logs
+
+Watch logs create a social timeline of watching activity.
+
+### Watch Logs Table
+
+```typescript
+watchLogs: {
+  userId: Id<"users">,
+  showId: Id<"shows">,
+  watchedAt: number,
+  note?: string,
+  seasonNumber?: number,
+  episodeNumber?: number,
+  episodeTitle?: string
+}
+```
+
+### Log Features
+
+- **Personal notes**: Add thoughts and reactions (up to 500 characters)
+- **Episode-specific logs**: Track individual episode watches
+- **Season logs**: Log watching multiple episodes at once
+- **Social feed**: Logs appear in followers' feeds
+- **Editing**: Update notes and watched dates after creation
+
+<Note>
+Watch logs are automatically created when users mark episodes as watched (unless `createLog: false` is specified).
+</Note>
+
+## Up Next
+
+The "Up Next" feature helps users continue watching from where they left off.
+
+### How It Works
+
+1. **Analyze Progress**: Checks episode progress for shows marked as "watching" or "completed"
+2. **Find Next Episode**: Determines the next unwatched episode based on:
+   - User's watch history
+   - Available episodes from TMDB cache
+   - Air dates and episode availability
+3. **Display Recommendations**: Shows up to 20 shows sorted by most recently watched
+
+### Up Next Component
+
+The `UpNextRail` component displays:
+- Show poster
+- Next episode to watch (S##E## format)
+- Quick-mark button to mark episode as watched
+- Air date for upcoming episodes
+- Total episodes watched count
+
+```typescript
+type UpNextItem = {
+  showId: Id<"shows">,
+  show: { title: string, posterUrl?: string },
+  totalWatched: number,
+  nextSeasonNumber: number,
+  nextEpisodeNumber: number,
+  nextAirDate?: number,
+  isUpcoming: boolean
+}
+```
+
+## Statistics & Counters
+
+Users can view tracking statistics:
+
+<CardGroup cols={3}>
+  <Card title="Total Episodes" icon="tv">
+    Count of all episodes watched across all shows
+  </Card>
+  <Card title="Watch Time" icon="clock">
+    Estimated total minutes watched (based on episode runtime)
+  </Card>
+  <Card title="Shows Progress" icon="chart-bar">
+    Number of shows with episode progress
+  </Card>
+</CardGroup>
+
+### Profile Counters
+
+The user profile maintains real-time counts:
+
+```typescript
+{
+  countsWatchlist: number,
+  countsWatching: number,
+  countsCompleted: number,
+  countsDropped: number,
+  countsTotalShows: number,
+  countsLogs: number,
+  countsReviews: number
+}
+```
+
+## Privacy & Visibility
+
+Tracking data respects user privacy settings:
+
+- Watchlists can be public, followers-only, or private
+- Watch logs appear in social feeds based on visibility settings
+- Profile counts are visible according to profile visibility preferences
+- Episode progress is private by default
+
+<Info>
+All tracking mutations clear the user's taste cache to ensure recommendation algorithms stay up-to-date with viewing preferences.
+</Info>

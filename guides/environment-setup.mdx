@@ -1,0 +1,149 @@
+---
+title: Environment Setup
+description: Configure environment variables and API keys for Plotlist development
+---
+
+Plotlist requires several environment variables to function properly. This guide covers all required and optional configuration.
+
+## Quick Start
+
+Copy the example environment file:
+
+```bash
+cp .env.example .env
+```
+
+Then fill in the required values described below.
+
+## Environment Variables
+
+### Required Variables
+
+These variables are essential for normal development:
+
+<ParamField path="EXPO_PUBLIC_CONVEX_URL" type="string" required>
+  Your Convex deployment URL. Get this from your Convex dashboard after creating a project.
+  
+  Example: `https://your-project.convex.cloud`
+  
+  <Note>Variables prefixed with `EXPO_PUBLIC_` are exposed to the client bundle.</Note>
+</ParamField>
+
+<ParamField path="TMDB_API_KEY" type="string" required>
+  TMDB API key for show metadata, search, details, and release data.
+  
+  **How to get it:**
+  1. Create an account at [themoviedb.org](https://www.themoviedb.org/)
+  2. Go to Settings → API
+  3. Request an API key (choose "Developer" option)
+  4. Copy your API Key (v3 auth)
+</ParamField>
+
+<ParamField path="TWILIO_ACCOUNT_SID" type="string" required>
+  Twilio account SID for phone authentication.
+  
+  Find this in your [Twilio Console](https://console.twilio.com/).
+</ParamField>
+
+<ParamField path="TWILIO_AUTH_TOKEN" type="string" required>
+  Twilio authentication token.
+  
+  Find this in your [Twilio Console](https://console.twilio.com/) (click "Show" to reveal).
+</ParamField>
+
+<ParamField path="TWILIO_VERIFY_SERVICE_SID" type="string" required>
+  Twilio Verify service SID used for OTP delivery.
+  
+  **How to get it:**
+  1. Go to [Twilio Verify](https://console.twilio.com/us1/develop/verify/services)
+  2. Create a new Verify Service
+  3. Copy the Service SID
+</ParamField>
+
+<ParamField path="CONTACT_HASH_SECRET" type="string" required>
+  Secret used to hash normalized phone numbers before contact snapshots are stored.
+  
+  <Warning>
+    Generate a strong random secret for this value. Never commit this to version control or share it publicly.
+  </Warning>
+  
+  Generate a secure random string:
+  ```bash
+  node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  ```
+</ParamField>
+
+### Optional Variables
+
+<ParamField path="GEMINI_API_KEY" type="string">
+  Google Gemini API key for embeddings and taste-based recommendations.
+  
+  **How to get it:**
+  1. Go to [Google AI Studio](https://aistudio.google.com/app/apikey)
+  2. Create a new API key
+  3. Copy the key
+  
+  <Note>
+    Without this key, recommendation and semantic search features will degrade gracefully.
+  </Note>
+</ParamField>
+
+### App Review Testing Variables
+
+These optional flags enable test sign-in flows for App Store review:
+
+<ParamField path="ALLOW_APP_REVIEW_OTP_BYPASS" type="boolean">
+  Enables OTP bypass for testing. Set to `true` to allow test credentials.
+  
+  <Warning>Only use this in development or for App Review testing. Never enable in production.</Warning>
+</ParamField>
+
+<ParamField path="APP_REVIEW_TEST_PHONE" type="string">
+  Test phone number that can bypass OTP verification when `ALLOW_APP_REVIEW_OTP_BYPASS` is enabled.
+  
+  Example: `+15555551234`
+</ParamField>
+
+<ParamField path="APP_REVIEW_TEST_CODE" type="string">
+  Fixed OTP code accepted for the test phone number.
+  
+  Example: `123456`
+</ParamField>
+
+## Complete .env.example Reference
+
+```bash .env.example
+EXPO_PUBLIC_CONVEX_URL=
+TMDB_API_KEY=
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_VERIFY_SERVICE_SID=
+CONTACT_HASH_SECRET=
+ALLOW_APP_REVIEW_OTP_BYPASS=
+APP_REVIEW_TEST_PHONE=
+APP_REVIEW_TEST_CODE=
+```
+
+## Security Considerations
+
+<Steps>
+  <Step title="Never commit .env files">
+    The `.env` file is in `.gitignore` by default. Keep it that way.
+  </Step>
+  
+  <Step title="Use different secrets per environment">
+    Use separate `CONTACT_HASH_SECRET` values for development, staging, and production.
+  </Step>
+  
+  <Step title="Rotate credentials regularly">
+    Regularly rotate API keys and secrets, especially if you suspect they've been exposed.
+  </Step>
+  
+  <Step title="Limit test bypasses to development">
+    Only use `ALLOW_APP_REVIEW_OTP_BYPASS` in development or during App Review. Never in production.
+  </Step>
+</Steps>
+
+## Next Steps
+
+Once your environment is configured, you're ready to [run the app locally](/guides/running-locally).

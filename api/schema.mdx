@@ -1,0 +1,614 @@
+---
+title: 'Database Schema'
+description: 'Convex database schema for Plotlist'
+---
+
+## Overview
+
+Plotlist uses Convex as its backend database with a comprehensive schema for managing users, shows, watch states, social features, and AI-powered recommendations.
+
+## Core Tables
+
+### users
+
+User profiles with authentication data and activity counters.
+
+<ResponseField name="_id" type="Id<'users'>" required>
+  Unique user identifier
+</ResponseField>
+
+<ResponseField name="username" type="string">
+  Unique username (lowercase, alphanumeric + underscore)
+</ResponseField>
+
+<ResponseField name="displayName" type="string">
+  User's display name
+</ResponseField>
+
+<ResponseField name="bio" type="string">
+  User biography/description
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  User email address (from Convex Auth)
+</ResponseField>
+
+<ResponseField name="phone" type="string">
+  Normalized phone number
+</ResponseField>
+
+<ResponseField name="phoneHash" type="string">
+  Hashed phone number for contact matching
+</ResponseField>
+
+<ResponseField name="avatarStorageId" type="Id<'_storage'>">
+  Reference to uploaded avatar image
+</ResponseField>
+
+<ResponseField name="favoriteShowIds" type="Id<'shows'>[]">
+  Array of up to 4 favorite show IDs
+</ResponseField>
+
+<ResponseField name="favoriteGenres" type="string[]">
+  Array of up to 5 favorite genre names
+</ResponseField>
+
+<ResponseField name="profileVisibility" type="ProfileVisibility">
+  Privacy settings for profile sections (favorites, watchlist, currentlyWatching)
+</ResponseField>
+
+<ResponseField name="onboardingStep" type="'profile' | 'follow' | 'shows' | 'complete'">
+  Current onboarding step
+</ResponseField>
+
+<Expandable title="Activity Counters">
+  <ResponseField name="countsFollowers" type="number" default="0">
+    Number of followers
+  </ResponseField>
+  
+  <ResponseField name="countsFollowing" type="number" default="0">
+    Number of users being followed
+  </ResponseField>
+  
+  <ResponseField name="countsReviews" type="number" default="0">
+    Total review count
+  </ResponseField>
+  
+  <ResponseField name="countsLogs" type="number" default="0">
+    Total watch log count
+  </ResponseField>
+  
+  <ResponseField name="countsLists" type="number" default="0">
+    Total list count
+  </ResponseField>
+  
+  <ResponseField name="countsWatchlist" type="number" default="0">
+    Shows in watchlist
+  </ResponseField>
+  
+  <ResponseField name="countsWatching" type="number" default="0">
+    Currently watching shows
+  </ResponseField>
+  
+  <ResponseField name="countsCompleted" type="number" default="0">
+    Completed shows
+  </ResponseField>
+  
+  <ResponseField name="countsDropped" type="number" default="0">
+    Dropped shows
+  </ResponseField>
+  
+  <ResponseField name="countsTotalShows" type="number" default="0">
+    Total unique shows tracked
+  </ResponseField>
+</Expandable>
+
+**Indexes:**
+- `by_username` - Lookup by username
+- `by_email` - Lookup by email
+- `by_phoneHash` - Contact sync matching
+- `by_createdAt` - Recent users
+- `search_users` - Full-text search on searchText
+
+### shows
+
+TV show catalog ingested from TMDB.
+
+<ResponseField name="_id" type="Id<'shows'>" required>
+  Unique show identifier
+</ResponseField>
+
+<ResponseField name="externalSource" type="string" required>
+  External data source (typically "tmdb")
+</ResponseField>
+
+<ResponseField name="externalId" type="string" required>
+  TMDB show ID
+</ResponseField>
+
+<ResponseField name="title" type="string" required>
+  Primary show title
+</ResponseField>
+
+<ResponseField name="originalTitle" type="string">
+  Original language title
+</ResponseField>
+
+<ResponseField name="year" type="number">
+  First air year
+</ResponseField>
+
+<ResponseField name="overview" type="string">
+  Show description/synopsis
+</ResponseField>
+
+<ResponseField name="posterUrl" type="string">
+  Poster image URL (TMDB w500)
+</ResponseField>
+
+<ResponseField name="backdropUrl" type="string">
+  Backdrop image URL (TMDB w1280)
+</ResponseField>
+
+<ResponseField name="genreIds" type="number[]">
+  TMDB genre IDs
+</ResponseField>
+
+<ResponseField name="tmdbPopularity" type="number">
+  TMDB popularity score
+</ResponseField>
+
+<ResponseField name="tmdbVoteAverage" type="number">
+  TMDB average rating
+</ResponseField>
+
+<ResponseField name="searchText" type="string" required>
+  Normalized text for full-text search
+</ResponseField>
+
+**Indexes:**
+- `by_external` - Lookup by (externalSource, externalId)
+- `search_shows` - Full-text search on searchText
+
+### watchStates
+
+User watch status for shows (watchlist, watching, completed, dropped).
+
+<ResponseField name="userId" type="Id<'users'>" required>
+  User who owns this watch state
+</ResponseField>
+
+<ResponseField name="showId" type="Id<'shows'>" required>
+  Show being tracked
+</ResponseField>
+
+<ResponseField name="status" type="'watchlist' | 'watching' | 'completed' | 'dropped'" required>
+  Current watch status
+</ResponseField>
+
+<ResponseField name="updatedAt" type="number" required>
+  Timestamp of last status update
+</ResponseField>
+
+**Indexes:**
+- `by_user_updatedAt` - User's watch states by recency
+- `by_user_show` - Check status for specific show
+
+### reviews
+
+User reviews and ratings for shows or episodes.
+
+<ResponseField name="authorId" type="Id<'users'>" required>
+  Review author
+</ResponseField>
+
+<ResponseField name="showId" type="Id<'shows'>" required>
+  Show being reviewed
+</ResponseField>
+
+<ResponseField name="rating" type="number" required>
+  Rating from 0.5 to 5.0 (in 0.5 increments)
+</ResponseField>
+
+<ResponseField name="reviewText" type="string">
+  Written review (max 5000 chars)
+</ResponseField>
+
+<ResponseField name="spoiler" type="boolean" required>
+  Whether review contains spoilers
+</ResponseField>
+
+<ResponseField name="seasonNumber" type="number">
+  Season number for episode reviews
+</ResponseField>
+
+<ResponseField name="episodeNumber" type="number">
+  Episode number for episode reviews
+</ResponseField>
+
+<ResponseField name="episodeTitle" type="string">
+  Episode title for display
+</ResponseField>
+
+**Indexes:**
+- `by_show_createdAt` - Reviews for a show by recency
+- `by_author_createdAt` - User's reviews by recency
+- `by_author_show` - Check if user reviewed a show
+- `by_show_episode` - Episode-specific reviews
+
+## Social Tables
+
+### follows
+
+Follower relationships between users.
+
+<ResponseField name="followerId" type="Id<'users'>" required>
+  User who is following
+</ResponseField>
+
+<ResponseField name="followeeId" type="Id<'users'>" required>
+  User being followed
+</ResponseField>
+
+<ResponseField name="createdAt" type="number" required>
+  When follow was created
+</ResponseField>
+
+**Indexes:**
+- `by_follower_createdAt` - Who a user follows
+- `by_followee_createdAt` - Who follows a user
+- `by_pair` - Check follow relationship
+
+### likes
+
+Likes on reviews, logs, and lists.
+
+<ResponseField name="userId" type="Id<'users'>" required>
+  User who liked
+</ResponseField>
+
+<ResponseField name="targetType" type="'review' | 'log' | 'list'" required>
+  Type of content being liked
+</ResponseField>
+
+<ResponseField name="targetId" type="string" required>
+  ID of the liked content
+</ResponseField>
+
+<ResponseField name="createdAt" type="number" required>
+  When like was created
+</ResponseField>
+
+### comments
+
+Comments on reviews, logs, and lists.
+
+<ResponseField name="authorId" type="Id<'users'>" required>
+  Comment author
+</ResponseField>
+
+<ResponseField name="targetType" type="'review' | 'log' | 'list'" required>
+  Type of content being commented on
+</ResponseField>
+
+<ResponseField name="targetId" type="string" required>
+  ID of the target content
+</ResponseField>
+
+<ResponseField name="text" type="string" required>
+  Comment text (max 1000 chars)
+</ResponseField>
+
+<ResponseField name="createdAt" type="number" required>
+  When comment was created
+</ResponseField>
+
+### lists
+
+User-created lists of shows.
+
+<ResponseField name="ownerId" type="Id<'users'>" required>
+  List owner
+</ResponseField>
+
+<ResponseField name="title" type="string" required>
+  List title (max 120 chars)
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  List description (max 2000 chars)
+</ResponseField>
+
+<ResponseField name="isPublic" type="boolean" required>
+  Whether list is publicly visible
+</ResponseField>
+
+<ResponseField name="coverStorageId" type="Id<'_storage'>">
+  Optional cover image
+</ResponseField>
+
+### listItems
+
+Shows within a list, with ordering.
+
+<ResponseField name="listId" type="Id<'lists'>" required>
+  Parent list
+</ResponseField>
+
+<ResponseField name="showId" type="Id<'shows'>" required>
+  Show in list
+</ResponseField>
+
+<ResponseField name="position" type="number" required>
+  Sort order (1-based)
+</ResponseField>
+
+<ResponseField name="addedAt" type="number" required>
+  When show was added
+</ResponseField>
+
+**Indexes:**
+- `by_list_position` - Ordered items in a list
+- `by_list_show` - Check if show is in list
+
+## AI & Embeddings
+
+### showEmbeddings
+
+Vector embeddings for semantic search and recommendations.
+
+<ResponseField name="showId" type="Id<'shows'>" required>
+  Associated show
+</ResponseField>
+
+<ResponseField name="embeddingVersion" type="string" required>
+  Version identifier for embedding model
+</ResponseField>
+
+<ResponseField name="model" type="string" required>
+  Embedding model name (e.g., "gemini-embedding-2-preview")
+</ResponseField>
+
+<ResponseField name="dimensions" type="number" required>
+  Vector dimensions (1536)
+</ResponseField>
+
+<ResponseField name="similarityEmbedding" type="number[]" required>
+  Vector for similarity search
+</ResponseField>
+
+<ResponseField name="retrievalEmbedding" type="number[]" required>
+  Vector for retrieval queries
+</ResponseField>
+
+<ResponseField name="inputText" type="string" required>
+  Source text used for embedding
+</ResponseField>
+
+<ResponseField name="inputHash" type="string" required>
+  Hash of input text for change detection
+</ResponseField>
+
+**Vector Indexes:**
+- `by_similarity_embedding` - Semantic similarity search
+- `by_retrieval_embedding` - Query-based retrieval
+
+### userTasteProfiles
+
+User taste embeddings for recommendations and matching.
+
+<ResponseField name="userId" type="Id<'users'>" required>
+  User profile belongs to
+</ResponseField>
+
+<ResponseField name="embeddingVersion" type="string" required>
+  Version of embedding algorithm
+</ResponseField>
+
+<ResponseField name="signalFingerprint" type="string" required>
+  Hash of signals used to build profile
+</ResponseField>
+
+<ResponseField name="favoriteShowIds" type="Id<'shows'>[]" required>
+  User's favorite shows
+</ResponseField>
+
+<ResponseField name="favoriteThemes" type="string[]" required>
+  User's favorite themes/genres
+</ResponseField>
+
+<ResponseField name="positiveShowIds" type="Id<'shows'>[]" required>
+  Shows weighted positively in taste calculation
+</ResponseField>
+
+<ResponseField name="negativeShowIds" type="Id<'shows'>[]" required>
+  Shows weighted negatively (dropped, low-rated)
+</ResponseField>
+
+<ResponseField name="similarityEmbedding" type="number[]" required>
+  User taste vector (1536 dimensions)
+</ResponseField>
+
+**Vector Index:**
+- `by_similarity_embedding` - Find users with similar taste
+
+### userTasteCaches
+
+Cached personalized recommendations per theme.
+
+<ResponseField name="userId" type="Id<'users'>" required>
+  User these recommendations are for
+</ResponseField>
+
+<ResponseField name="themeKey" type="string" required>
+  Theme identifier ("__default__" or normalized theme)
+</ResponseField>
+
+<ResponseField name="embeddingVersion" type="string" required>
+  Embedding version used
+</ResponseField>
+
+<ResponseField name="signalFingerprint" type="string" required>
+  Hash of signals - invalidates cache on change
+</ResponseField>
+
+<ResponseField name="recommendations" type="array" required>
+  Array of recommended shows with metadata
+</ResponseField>
+
+<ResponseField name="expiresAt" type="number" required>
+  Cache expiration timestamp
+</ResponseField>
+
+**Index:**
+- `by_user_theme` - Lookup cached recommendations by theme
+
+## Cache Tables
+
+### tmdbDetailsCache
+
+Cached TMDB show details (credits, videos, providers).
+
+<ResponseField name="externalSource" type="string" required>
+  Source identifier ("tmdb" or "tmdb-season")
+</ResponseField>
+
+<ResponseField name="externalId" type="string" required>
+  TMDB ID or composite season key
+</ResponseField>
+
+<ResponseField name="payload" type="any" required>
+  Cached API response
+</ResponseField>
+
+<ResponseField name="fetchedAt" type="number" required>
+  When data was fetched
+</ResponseField>
+
+<ResponseField name="expiresAt" type="number" required>
+  Cache expiration timestamp
+</ResponseField>
+
+### tmdbSearchCache
+
+Cached TMDB search results.
+
+<ResponseField name="query" type="string" required>
+  Search query string
+</ResponseField>
+
+<ResponseField name="results" type="any" required>
+  Cached search results
+</ResponseField>
+
+<ResponseField name="fetchedAt" type="number" required>
+  When search was performed
+</ResponseField>
+
+<ResponseField name="expiresAt" type="number" required>
+  Cache expiration (24 hours)
+</ResponseField>
+
+## Schema Code
+
+```typescript convex/schema.ts
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
+
+const Status = v.union(
+  v.literal("watchlist"),
+  v.literal("watching"),
+  v.literal("completed"),
+  v.literal("dropped"),
+);
+
+const TargetType = v.union(
+  v.literal("review"),
+  v.literal("log"),
+  v.literal("list"),
+);
+
+export default defineSchema({
+  users: defineTable({
+    // Auth fields
+    name: v.optional(v.string()),
+    image: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    phoneHash: v.optional(v.string()),
+    
+    // Profile fields
+    username: v.optional(v.string()),
+    displayName: v.optional(v.string()),
+    bio: v.optional(v.string()),
+    avatarStorageId: v.optional(v.id("_storage")),
+    favoriteShowIds: v.optional(v.array(v.id("shows"))),
+    favoriteGenres: v.optional(v.array(v.string())),
+    
+    // Activity counters
+    countsFollowers: v.optional(v.number()),
+    countsFollowing: v.optional(v.number()),
+    countsReviews: v.optional(v.number()),
+    // ... other counts
+  })
+    .index("by_username", ["username"])
+    .searchIndex("search_users", {
+      searchField: "searchText",
+    }),
+
+  shows: defineTable({
+    externalSource: v.string(),
+    externalId: v.string(),
+    title: v.string(),
+    year: v.optional(v.number()),
+    overview: v.optional(v.string()),
+    posterUrl: v.optional(v.string()),
+    genreIds: v.optional(v.array(v.number())),
+    searchText: v.string(),
+  })
+    .index("by_external", ["externalSource", "externalId"])
+    .searchIndex("search_shows", {
+      searchField: "searchText",
+      filterFields: ["externalSource"],
+    }),
+
+  watchStates: defineTable({
+    userId: v.id("users"),
+    showId: v.id("shows"),
+    status: Status,
+    updatedAt: v.number(),
+  })
+    .index("by_user_updatedAt", ["userId", "updatedAt"])
+    .index("by_user_show", ["userId", "showId"]),
+
+  reviews: defineTable({
+    authorId: v.id("users"),
+    showId: v.id("shows"),
+    rating: v.number(),
+    reviewText: v.optional(v.string()),
+    spoiler: v.boolean(),
+    seasonNumber: v.optional(v.number()),
+    episodeNumber: v.optional(v.number()),
+  })
+    .index("by_show_createdAt", ["showId", "createdAt"])
+    .index("by_author_show", ["authorId", "showId"]),
+
+  showEmbeddings: defineTable({
+    showId: v.id("shows"),
+    embeddingVersion: v.string(),
+    similarityEmbedding: v.array(v.float64()),
+    retrievalEmbedding: v.array(v.float64()),
+    dimensions: v.number(),
+  })
+    .vectorIndex("by_similarity_embedding", {
+      vectorField: "similarityEmbedding",
+      dimensions: 1536,
+      filterFields: ["embeddingVersion"],
+    })
+    .vectorIndex("by_retrieval_embedding", {
+      vectorField: "retrievalEmbedding",
+      dimensions: 1536,
+      filterFields: ["embeddingVersion"],
+    }),
+});
+```

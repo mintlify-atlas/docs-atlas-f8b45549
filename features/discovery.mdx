@@ -1,0 +1,465 @@
+---
+title: "Discovery"
+description: "AI-powered recommendations, semantic search, taste matching, and personalized discovery"
+---
+
+# Discovery
+
+Plotlist uses AI-powered discovery features to help users find their next favorite show through semantic search, personalized recommendations, and taste matching.
+
+## AI-Powered Recommendations
+
+Plotlist generates personalized recommendations using vector embeddings and user taste profiles.
+
+### How It Works
+
+<Steps>
+  <Step title="Analyze User Behavior">
+    The system collects signals from:
+    - Watch states (watchlist, watching, completed, dropped)
+    - Reviews and ratings (0.5 to 5 stars)
+    - Favorite shows and themes
+  </Step>
+  
+  <Step title="Generate Taste Profile">
+    Creates a user taste profile by:
+    - Computing weighted centroids of liked show embeddings
+    - Incorporating favorite themes as text embeddings
+    - Building a unique taste fingerprint
+  </Step>
+  
+  <Step title="Find Matches">
+    Uses vector search to find shows similar to the user's taste profile
+  </Step>
+  
+  <Step title="Apply Boosting">
+    Enhances results with:
+    - Genre overlap bonuses
+    - Rating quality bonuses
+    - Theme-specific boosting
+  </Step>
+</Steps>
+
+### Show Embeddings
+
+Every show has dual embeddings for different use cases:
+
+```typescript
+showEmbeddings: {
+  showId: Id<"shows">,
+  externalSource: string,
+  externalId: string,
+  embeddingVersion: string,
+  model: string, // "gemini-embedding-2-preview"
+  dimensions: number, // 1536
+  inputText: string,
+  inputHash: string,
+  similarityEmbedding: number[], // For taste matching
+  retrievalEmbedding: number[], // For semantic search
+  updatedAt: number
+}
+```
+
+<Info>
+**Similarity embeddings** are optimized for finding shows similar to user preferences.
+**Retrieval embeddings** are optimized for semantic search queries.
+</Info>
+
+### Building Show Embeddings
+
+Embeddings are created from show metadata:
+
+```typescript
+function buildShowEmbeddingText(show) {
+  return [
+    show.title,
+    show.originalTitle,
+    show.overview,
+    mapGenreIdsToNames(show.genreIds).join(", "),
+    `aired ${show.year}`
+  ].filter(Boolean).join(". ");
+}
+```
+
+### User Taste Profiles
+
+```typescript
+userTasteProfiles: {
+  userId: Id<"users">,
+  embeddingVersion: string,
+  signalFingerprint: string,
+  favoriteShowIds: Id<"shows">[],
+  favoriteThemes: string[],
+  positiveShowIds: Id<"shows">[],
+  negativeShowIds: Id<"shows">[],
+  similarityEmbedding: number[],
+  createdAt: number,
+  updatedAt: number
+}
+```
+
+### Taste Weights
+
+User signals are weighted to determine positive and negative preferences:
+
+<Accordion title="Signal Weighting">
+```typescript
+// Watch states
+Completed: +1.15
+Watching: +0.9
+Watchlist: +0.4
+Dropped: -1.25
+
+// Reviews (normalized)
+Rating: (rating - 2.5) / 1.6
+// 5 stars = +1.56
+// 1 star = -0.94
+
+// Favorites
+Favorite shows: +1.75
+```
+</Accordion>
+
+### Recommendation Caching
+
+Recommendations are cached for performance:
+
+```typescript
+userTasteCaches: {
+  userId: Id<"users">,
+  themeKey: string,
+  embeddingVersion: string,
+  signalFingerprint: string,
+  recommendations: RecommendationResult[],
+  positiveShowIds: Id<"shows">[],
+  negativeShowIds: Id<"shows">[],
+  expiresAt: number, // 6 hour TTL
+  createdAt: number,
+  updatedAt: number
+}
+```
+
+<Note>
+Caches are automatically cleared when users update their watch states, reviews, or favorites.
+</Note>
+
+## Semantic Search
+
+Plotlist supports natural language search powered by AI embeddings.
+
+### Search Capabilities
+
+<CardGroup cols={2}>
+  <Card title="Title Search" icon="search">
+    Standard lexical search for show titles
+  </Card>
+  <Card title="Semantic Search" icon="brain">
+    Understand intent and meaning beyond keywords
+  </Card>
+  <Card title="Genre Intent" icon="filter">
+    Detect genre hints like "funny", "mystery", "sci-fi"
+  </Card>
+  <Card title="Similar Shows" icon="clone">
+    Handle queries like "shows like Breaking Bad"
+  </Card>
+</CardGroup>
+
+### Search Query Patterns
+
+```typescript
+// Pattern matching for "shows like X"
+const likeMatch = query.match(
+  /^shows?\s+like\s+(.+?)(?:\s+but\s+(.+))?$/i
+);
+
+if (likeMatch) {
+  const seedQuery = likeMatch[1]; // "Breaking Bad"
+  const modifier = likeMatch[2];  // "more comedic"
+  // Find seed show, then recommend similar shows
+}
+```
+
+### Hybrid Search
+
+Combines lexical and semantic approaches:
+
+1. **Lexical Search**: Fast title-based matching
+2. **Semantic Search**: Vector similarity search
+3. **Merge Results**: Combines both with intelligent scoring
+4. **Fallback**: TMDB API search if needed
+
+<Accordion title="Search Scoring Formula">
+```typescript
+const hybridScore = {
+  exactTitleMatch: 1.0,
+  prefixTitleMatch: 0.85,
+  lexicalScore: 0.25 - 0.92, // Based on ranking
+  semanticScore: vectorScore, // 0-1 cosine similarity
+  coverageScore: matchedTokens / queryTokens,
+  intentScore: genreOverlap,
+  popularityBonus: min(tmdbPopularity / 100, 0.08)
+};
+```
+</Accordion>
+
+### Genre Intent Detection
+
+The search understands genre hints:
+
+```typescript
+const SEARCH_GENRE_HINTS = [
+  {
+    genreId: 35, // Comedy
+    tokens: ["funny", "comedy", "comedic", "humorous", 
+             "witty", "comfort", "cozy"]
+  },
+  {
+    genreId: 9648, // Mystery
+    tokens: ["mystery", "mysterious", "detective", 
+             "sleuth", "whodunit", "investigation"]
+  },
+  {
+    genreId: 80, // Crime
+    tokens: ["crime", "criminal", "cartel", "gang", 
+             "mafia", "heist", "noir"]
+  }
+];
+```
+
+## Taste Matching
+
+Find users with similar taste profiles.
+
+### How Taste Matching Works
+
+<Steps>
+  <Step title="Build User Profile">
+    Create taste embedding from user's favorite shows and themes
+  </Step>
+  
+  <Step title="Vector Search">
+    Find users with similar taste embeddings using cosine similarity
+  </Step>
+  
+  <Step title="Calculate Match">
+    Compute match percentage and shared favorite shows
+  </Step>
+</Steps>
+
+### Taste Match Result
+
+```typescript
+type TasteMatchDetails = {
+  percent: number, // 1-99%
+  sharedFavoriteShows: {
+    showId: Id<"shows">,
+    title: string,
+    year?: number,
+    posterUrl?: string
+  }[]
+}
+```
+
+### Similar Users
+
+Find users with similar taste:
+
+```typescript
+// Find similar users via vector search
+const results = await ctx.vectorSearch(
+  "userTasteProfiles",
+  "by_similarity_embedding",
+  {
+    vector: currentUserProfile.similarityEmbedding,
+    limit: 20,
+    filter: (q) => q.eq("embeddingVersion", EMBEDDING_VERSION)
+  }
+);
+```
+
+## Discovery Rails
+
+Pre-curated discovery experiences.
+
+### Recommendation Rails
+
+<CardGroup cols={2}>
+  <Card title="For You" icon="sparkles">
+    Personalized recommendations based on taste profile
+  </Card>
+  <Card title="Similar Shows" icon="clone">
+    Shows similar to one the user is viewing
+  </Card>
+  <Card title="Trending" icon="fire">
+    Popular shows on the platform
+  </Card>
+  <Card title="Smart Lists" icon="list">
+    Curated thematic collections
+  </Card>
+</CardGroup>
+
+### Smart Lists
+
+Thematically curated show collections:
+
+```typescript
+type SmartListConfig = {
+  key: string,
+  title: string,
+  description: string,
+  theme: string,
+  tmdbSeedIds: string[], // Seed shows for recommendations
+  curation?: {
+    boostGenreIds?: number[],
+    requiredKeywordGroups?: string[][],
+    keywordBoostTerms?: string[]
+  }
+}
+```
+
+<Accordion title="Smart List Example">
+```typescript
+{
+  key: "cozy-mysteries",
+  title: "Cozy Mysteries",
+  description: "Light detective shows perfect for relaxing",
+  theme: "cozy mystery detective shows",
+  tmdbSeedIds: ["12345", "67890"],
+  curation: {
+    boostGenreIds: [9648, 35], // Mystery + Comedy
+    requiredKeywordGroups: [
+      ["detective", "mystery", "sleuth"]
+    ],
+    keywordBoostTerms: ["cozy", "light", "charming"]
+  }
+}
+```
+</Accordion>
+
+## TMDB Integration
+
+Plotlist uses The Movie Database (TMDB) as its catalog source.
+
+### Show Data Structure
+
+```typescript
+shows: {
+  externalSource: "tmdb",
+  externalId: string,
+  title: string,
+  originalTitle?: string,
+  year?: number,
+  overview?: string,
+  posterUrl?: string,
+  backdropUrl?: string,
+  genreIds?: number[],
+  originalLanguage?: string,
+  originCountries?: string[],
+  tmdbPopularity?: number,
+  tmdbVoteAverage?: number,
+  tmdbVoteCount?: number,
+  searchText: string,
+  createdAt: number,
+  updatedAt: number
+}
+```
+
+### TMDB Caching
+
+Three types of caches for performance:
+
+<Accordion title="TMDB Cache Tables">
+```typescript
+// Show details cache
+tmdbDetailsCache: {
+  externalSource: "tmdb",
+  externalId: string,
+  payload: any, // Raw TMDB response
+  fetchedAt: number,
+  expiresAt: number
+}
+
+// Search results cache
+tmdbSearchCache: {
+  query: string,
+  results: any,
+  fetchedAt: number,
+  expiresAt: number
+}
+
+// Category lists cache (trending, popular, etc.)
+tmdbListCache: {
+  category: string,
+  results: any,
+  fetchedAt: number,
+  expiresAt: number
+}
+```
+</Accordion>
+
+### Import Jobs
+
+Background jobs import popular shows:
+
+```typescript
+tmdbImportJobs: {
+  kind: "top_tv",
+  status: "queued" | "running" | "completed" | "failed",
+  targetCount: number,
+  pageSize: number,
+  maxPage: number,
+  nextPage: number,
+  pagesProcessed: number,
+  showsProcessed: number,
+  startedAt?: number,
+  completedAt?: number
+}
+```
+
+## Embedding Backfill
+
+A background job system ensures all shows have embeddings.
+
+### Backfill Process
+
+<Steps>
+  <Step title="Create Job">
+    Initialize a backfill job with target show count
+  </Step>
+  
+  <Step title="Batch Processing">
+    Process shows in batches of 20
+  </Step>
+  
+  <Step title="Generate Embeddings">
+    Call Gemini API to generate dual embeddings
+  </Step>
+  
+  <Step title="Store Results">
+    Save embeddings to database with version hash
+  </Step>
+  
+  <Step title="Continue">
+    Schedule next batch until all shows processed
+  </Step>
+</Steps>
+
+```typescript
+showEmbeddingJobs: {
+  kind: "show_catalog",
+  status: "queued" | "running" | "completed" | "failed",
+  embeddingVersion: string,
+  model: string,
+  dimensions: number,
+  batchSize: number,
+  nextCursor?: string,
+  processedCount: number,
+  embeddedCount: number,
+  skippedCount: number,
+  totalCount?: number
+}
+```
+
+<Info>
+Embeddings are only regenerated when show data changes or embedding version updates.
+</Info>

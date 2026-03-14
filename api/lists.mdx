@@ -1,0 +1,485 @@
+---
+title: 'Lists API'
+description: 'User-created lists of shows with ordering and privacy controls'
+---
+
+## Overview
+
+The Lists API manages user-created collections of TV shows. Lists can be public or private, support custom ordering, and include optional cover images and descriptions.
+
+## Tables
+
+### lists
+
+List metadata and settings.
+
+<ResponseField name="ownerId" type="Id<'users'>" required>
+  User who created the list
+</ResponseField>
+
+<ResponseField name="title" type="string" required>
+  List title (max 120 characters)
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  List description (max 2000 characters)
+</ResponseField>
+
+<ResponseField name="isPublic" type="boolean" required>
+  Whether list is publicly visible
+</ResponseField>
+
+<ResponseField name="coverStorageId" type="Id<'_storage'>">
+  Optional cover image
+</ResponseField>
+
+### listItems
+
+Shows within a list, with ordering.
+
+<ResponseField name="listId" type="Id<'lists'>" required>
+  Parent list
+</ResponseField>
+
+<ResponseField name="showId" type="Id<'shows'>" required>
+  Show in the list
+</ResponseField>
+
+<ResponseField name="position" type="number" required>
+  Sort order (1-based, lower = earlier)
+</ResponseField>
+
+<ResponseField name="addedAt" type="number" required>
+  Timestamp when show was added
+</ResponseField>
+
+## List Queries
+
+### get
+
+Get a list by ID.
+
+```typescript
+export const get = query({
+  args: { listId: v.id("lists") },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="listId" type="Id<'lists'>" required>
+  List ID
+</ParamField>
+
+**Returns:** List document or `null`.
+
+**Errors:**
+- `"Not allowed"` - Private list and viewer is not owner
+
+### listForUser
+
+Get authenticated user's lists.
+
+```typescript
+export const listForUser = query({
+  args: { 
+    userId: v.id("users"), 
+    paginationOpts: paginationOptsValidator 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="userId" type="Id<'users'>" required>
+  Must be authenticated user's ID
+</ParamField>
+
+**Returns:** Paginated lists ordered by `updatedAt` (most recent first).
+
+**Errors:**
+- `"Not allowed"` - userId doesn't match authenticated user
+
+### listPublicForUser
+
+Get public lists by a user.
+
+```typescript
+export const listPublicForUser = query({
+  args: { 
+    userId: v.id("users"), 
+    paginationOpts: paginationOptsValidator 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Returns:** Paginated public lists only.
+
+## List Item Queries
+
+### list
+
+Get items in a list.
+
+```typescript
+export const list = query({
+  args: { listId: v.id("lists") },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Returns:** Array of list item documents ordered by `position`.
+
+**Errors:**
+- `"Not allowed"` - Private list and viewer is not owner
+
+### listDetailed
+
+Get list items with full show information.
+
+```typescript
+export const listDetailed = query({
+  args: { listId: v.id("lists") },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Returns:** Array of `{ item, show }` objects ordered by position.
+
+### getShowMembership
+
+Check which of authenticated user's lists contain a show.
+
+```typescript
+export const getShowMembership = query({
+  args: { showId: v.id("shows") },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="showId" type="Id<'shows'>" required>
+  Show to check membership for
+</ParamField>
+
+**Returns:** Array of list IDs that contain this show.
+
+## List Mutations
+
+### create
+
+Create a new list.
+
+```typescript
+export const create = mutation({
+  args: {
+    title: v.string(),
+    description: v.optional(v.string()),
+    isPublic: v.boolean(),
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="title" type="string" required>
+  List title (max 120 characters)
+</ParamField>
+
+<ParamField path="description" type="string">
+  List description (max 2000 characters)
+</ParamField>
+
+<ParamField path="isPublic" type="boolean" required>
+  Whether list should be public
+</ParamField>
+
+**Returns:** List ID.
+
+**Rate limiting:** 20 lists per hour.
+
+**Side effects:**
+- Increments user's `countsLists`
+
+### update
+
+Update list metadata.
+
+```typescript
+export const update = mutation({
+  args: {
+    listId: v.id("lists"),
+    title: v.optional(v.string()),
+    description: v.optional(v.string()),
+    isPublic: v.optional(v.boolean()),
+    coverStorageId: v.optional(v.id("_storage")),
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Rate limiting:** 20 updates per hour.
+
+**Errors:**
+- `"Not allowed"` - User doesn't own this list
+
+### deleteList
+
+Delete a list and all its items.
+
+```typescript
+export const deleteList = mutation({
+  args: { listId: v.id("lists") },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Side effects:**
+- Deletes all list items
+- Decrements user's `countsLists`
+
+**Errors:**
+- `"Not allowed"` - User doesn't own this list
+
+## List Item Mutations
+
+### add
+
+Add a show to a list.
+
+```typescript
+export const add = mutation({
+  args: { 
+    listId: v.id("lists"), 
+    showId: v.id("shows") 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="listId" type="Id<'lists'>" required>
+  List to add to
+</ParamField>
+
+<ParamField path="showId" type="Id<'shows'>" required>
+  Show to add
+</ParamField>
+
+**Returns:** List item ID.
+
+**Rate limiting:** 60 additions per minute.
+
+**Errors:**
+- `"Not allowed"` - User doesn't own this list
+- `"Show already in list"`
+
+**Behavior:**
+- Show is added to end of list (highest position + 1)
+
+### remove
+
+Remove a show from a list.
+
+```typescript
+export const remove = mutation({
+  args: { listItemId: v.id("listItems") },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="listItemId" type="Id<'listItems'>" required>
+  List item to remove
+</ParamField>
+
+**Errors:**
+- `"Not allowed"` - User doesn't own the parent list
+
+### toggle
+
+Add or remove a show from a list.
+
+```typescript
+export const toggle = mutation({
+  args: { 
+    listId: v.id("lists"), 
+    showId: v.id("shows") 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Returns:** `{ added: boolean }`
+
+**Rate limiting:** 60 toggles per minute.
+
+### reorder
+
+Reorder items in a list.
+
+```typescript
+export const reorder = mutation({
+  args: { 
+    listId: v.id("lists"), 
+    orderedItemIds: v.array(v.id("listItems")) 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="listId" type="Id<'lists'>" required>
+  List to reorder
+</ParamField>
+
+<ParamField path="orderedItemIds" type="Id<'listItems'>[]" required>
+  Array of list item IDs in desired order
+</ParamField>
+
+**Rate limiting:** 60 reorders per minute.
+
+**Errors:**
+- `"Not allowed"` - User doesn't own this list
+
+## Example Usage
+
+### Create a List
+
+```typescript
+import { useMutation } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function CreateListForm() {
+  const createList = useMutation(api.lists.create);
+  
+  const handleSubmit = async (data: {
+    title: string;
+    description?: string;
+    isPublic: boolean;
+  }) => {
+    const listId = await createList(data);
+    console.log("Created list:", listId);
+  };
+  
+  return <Form onSubmit={handleSubmit} />;
+}
+```
+
+### Display List Items
+
+```typescript
+import { useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function ListView({ listId }: { listId: Id<"lists"> }) {
+  const list = useQuery(api.lists.get, { listId });
+  const items = useQuery(api.listItems.listDetailed, { listId });
+  
+  if (!list || !items) return <Loading />;
+  
+  return (
+    <div>
+      <h1>{list.title}</h1>
+      {list.description && <p>{list.description}</p>}
+      <div className="items">
+        {items.map(({ item, show }) => (
+          <ShowCard key={item._id} show={show} />
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+### Add Show to List
+
+```typescript
+import { useMutation, useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function AddToListButton({ showId }: { showId: Id<"shows"> }) {
+  const userLists = useQuery(api.lists.listForUser, {
+    userId: currentUserId,
+    paginationOpts: { numItems: 100, cursor: null },
+  });
+  const addToList = useMutation(api.listItems.add);
+  
+  const handleAdd = async (listId: Id<"lists">) => {
+    await addToList({ listId, showId });
+  };
+  
+  return (
+    <ListPicker
+      lists={userLists?.page ?? []}
+      onSelect={handleAdd}
+    />
+  );
+}
+```
+
+### Reorder List Items
+
+```typescript
+import { useMutation } from "convex/react";
+import { api } from "../convex/_generated/api";
+import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
+
+function ReorderableList({ listId, items }: { 
+  listId: Id<"lists">; 
+  items: ListItem[];
+}) {
+  const reorder = useMutation(api.listItems.reorder);
+  
+  const handleDragEnd = async (result: any) => {
+    if (!result.destination) return;
+    
+    const reordered = Array.from(items);
+    const [removed] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, removed);
+    
+    await reorder({
+      listId,
+      orderedItemIds: reordered.map(item => item._id),
+    });
+  };
+  
+  return (
+    <DragDropContext onDragEnd={handleDragEnd}>
+      <Droppable droppableId="list">
+        {(provided) => (
+          <div ref={provided.innerRef} {...provided.droppableProps}>
+            {items.map((item, index) => (
+              <Draggable key={item._id} draggableId={item._id} index={index}>
+                {(provided) => (
+                  <div
+                    ref={provided.innerRef}
+                    {...provided.draggableProps}
+                    {...provided.dragHandleProps}
+                  >
+                    <ListItem item={item} />
+                  </div>
+                )}
+              </Draggable>
+            ))}
+            {provided.placeholder}
+          </div>
+        )}
+      </Droppable>
+    </DragDropContext>
+  );
+}
+```
+
+### Check List Membership
+
+```typescript
+import { useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function ListMembershipBadge({ showId }: { showId: Id<"shows"> }) {
+  const memberOf = useQuery(api.listItems.getShowMembership, { showId });
+  
+  if (!memberOf || memberOf.length === 0) return null;
+  
+  return (
+    <div className="badge">
+      In {memberOf.length} {memberOf.length === 1 ? "list" : "lists"}
+    </div>
+  );
+}
+```

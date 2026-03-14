@@ -1,0 +1,245 @@
+---
+title: Running Locally
+description: Step-by-step guide to run Plotlist on your local development environment
+---
+
+This guide walks you through running Plotlist locally for the first time.
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+- **Node.js** (v18 or later recommended)
+- **npm** (comes with Node.js)
+- An **Expo-compatible simulator/device**:
+  - iOS: Xcode and iOS Simulator (macOS only)
+  - Android: Android Studio and Android Emulator
+  - Web: Any modern browser
+- A **Convex project** (create one at [convex.dev](https://convex.dev))
+- Environment variables configured (see [Environment Setup](/guides/environment-setup))
+
+## Getting Started
+
+<Steps>
+  <Step title="Install dependencies">
+    Install all required packages:
+    
+    ```bash
+    npm install
+    ```
+    
+    This will install:
+    - Expo and React Native dependencies
+    - Convex client libraries
+    - UI and styling packages (NativeWind, Reanimated, etc.)
+    - Testing libraries
+  </Step>
+  
+  <Step title="Configure environment">
+    Set up your `.env` file with required credentials:
+    
+    ```bash
+    cp .env.example .env
+    ```
+    
+    Fill in at minimum:
+    - `EXPO_PUBLIC_CONVEX_URL`
+    - `TMDB_API_KEY`
+    - Twilio credentials (SID, auth token, verify service SID)
+    - `CONTACT_HASH_SECRET`
+    
+    See [Environment Setup](/guides/environment-setup) for detailed instructions.
+  </Step>
+  
+  <Step title="Start the Convex development server">
+    Convex must be running before you start the app. This generates typed client APIs:
+    
+    ```bash
+    npm run convex
+    ```
+    
+    Or use the full command:
+    
+    ```bash
+    npx convex dev
+    ```
+    
+    <Note>
+      Keep this running in a separate terminal. It watches for schema changes and regenerates types automatically.
+    </Note>
+    
+    On first run, you may need to:
+    - Link your Convex project
+    - Authenticate with Convex CLI
+    - Choose your deployment (create a new one if needed)
+  </Step>
+  
+  <Step title="Start the Expo development server">
+    In a new terminal, start Expo:
+    
+    ```bash
+    npm start
+    ```
+    
+    This opens the Expo developer menu where you can:
+    - Press `i` to open iOS simulator
+    - Press `a` to open Android emulator
+    - Press `w` to open web browser
+    - Scan the QR code with Expo Go app on your phone
+  </Step>
+</Steps>
+
+## Platform-Specific Commands
+
+You can also launch specific platforms directly:
+
+<CodeGroup>
+```bash iOS
+npm run ios
+```
+
+```bash Android
+npm run android
+```
+
+```bash Web
+npm run web
+```
+</CodeGroup>
+
+### iOS
+
+Runs the app in iOS Simulator (macOS only):
+
+```bash
+npm run ios
+```
+
+This executes `expo run:ios` which builds and launches the iOS app.
+
+### Android
+
+Runs the app in Android Emulator:
+
+```bash
+npm run android
+```
+
+This executes `expo run:android`. Make sure you have:
+- Android Studio installed
+- An Android Virtual Device (AVD) created
+- Android SDK configured
+
+### Web
+
+Runs the app in your browser:
+
+```bash
+npm run web
+```
+
+This executes `expo start --web`.
+
+<Note>
+  Some native features (like contacts, haptics, camera) won't work on web. Use iOS or Android for full functionality.
+</Note>
+
+## Development Workflow
+
+### Hot Reload
+
+Expo supports fast refresh out of the box:
+
+- **Save a file** and see changes instantly
+- **Component state is preserved** during most edits
+- Press `r` in the Expo terminal to **manually reload**
+- Press `Shift+r` to **reload and clear cache**
+
+### Running Both Servers
+
+You need **two terminals**:
+
+**Terminal 1 - Convex:**
+```bash
+npm run convex
+```
+
+**Terminal 2 - Expo:**
+```bash
+npm start
+```
+
+### Regenerating Convex Types
+
+If you modify the Convex schema manually:
+
+```bash
+npm run convex:codegen
+```
+
+This regenerates `convex/_generated` with updated types.
+
+<Note>
+  The Convex dev server (`npm run convex`) already watches for changes and regenerates types automatically.
+</Note>
+
+## Common Issues
+
+### "Cannot find module 'convex/_generated'"
+
+**Solution:** Run the Convex dev server first:
+
+```bash
+npm run convex
+```
+
+This generates the required `convex/_generated` types.
+
+### Expo stuck on "Waiting for connection"
+
+**Solutions:**
+- Ensure your device/simulator and computer are on the same network
+- Try clearing cache: press `Shift+r` in Expo terminal
+- Restart the Expo server: `npm start -- --clear`
+
+### "EXPO_PUBLIC_CONVEX_URL is not defined"
+
+**Solution:** Check your `.env` file:
+
+```bash
+EXPO_PUBLIC_CONVEX_URL=https://your-project.convex.cloud
+```
+
+Restart Expo after updating `.env` files.
+
+### Build errors after pulling changes
+
+**Solution:** Reinstall dependencies:
+
+```bash
+rm -rf node_modules
+npm install
+```
+
+### TypeScript errors in generated code
+
+**Solution:** Regenerate Convex types:
+
+```bash
+npm run convex:codegen
+```
+
+## Verification
+
+Once the app is running:
+
+1. You should see the **Plotlist authentication screen**
+2. Try signing in with a phone number (or test credentials if configured)
+3. Check the Convex dashboard to see data being written
+4. Make a code change and verify hot reload works
+
+## Next Steps
+
+- Learn about [testing](/guides/testing)
+- Explore the [architecture](/development/architecture)
+- Read about [Convex backend](/development/convex-backend)

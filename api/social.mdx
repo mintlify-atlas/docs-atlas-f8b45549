@@ -1,0 +1,581 @@
+---
+title: 'Social API'
+description: 'Follows, likes, comments, feed generation, and contact sync'
+---
+
+## Overview
+
+The Social API powers Plotlist's social features including follower relationships, likes, comments, activity feeds, and contact-based user discovery.
+
+## Follows
+
+### Queries
+
+#### isFollowing
+
+Check if authenticated user follows another user.
+
+```typescript
+export const isFollowing = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Returns:** `boolean`
+
+#### listFollowers
+
+Get users who follow a specific user.
+
+```typescript
+export const listFollowers = query({
+  args: { 
+    userId: v.id("users"), 
+    limit: v.optional(v.number()) 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Returns:** Array of follow documents ordered by `createdAt` (most recent first).
+
+#### listFollowing
+
+Get users that a specific user follows.
+
+```typescript
+export const listFollowing = query({
+  args: { 
+    userId: v.id("users"), 
+    limit: v.optional(v.number()) 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+#### listFollowersDetailed
+
+Get followers with full user previews.
+
+```typescript
+export const listFollowersDetailed = query({
+  args: { 
+    userId: v.id("users"), 
+    paginationOpts: paginationOptsValidator 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Returns:** Paginated user previews with relationship metadata.
+
+#### listFollowingDetailed
+
+Get following users with full previews.
+
+```typescript
+export const listFollowingDetailed = query({
+  args: { 
+    userId: v.id("users"), 
+    paginationOpts: paginationOptsValidator 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+### Mutations
+
+#### follow
+
+Follow a user.
+
+```typescript
+export const follow = mutation({
+  args: { userIdToFollow: v.id("users") },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="userIdToFollow" type="Id<'users'>" required>
+  User to follow
+</ParamField>
+
+**Returns:** Follow ID.
+
+**Rate limiting:** 30 follows per minute.
+
+**Side effects:**
+- Increments follower's `countsFollowing`
+- Increments followee's `countsFollowers`
+- Idempotent (returns existing follow if already following)
+
+#### unfollow
+
+Unfollow a user.
+
+```typescript
+export const unfollow = mutation({
+  args: { userIdToUnfollow: v.id("users") },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Side effects:**
+- Decrements follower's `countsFollowing`
+- Decrements followee's `countsFollowers`
+
+## Likes
+
+### Queries
+
+#### listForTarget
+
+Get likes on a review, log, or list.
+
+```typescript
+export const listForTarget = query({
+  args: { 
+    targetType: v.union(
+      v.literal("review"),
+      v.literal("log"),
+      v.literal("list"),
+    ), 
+    targetId: v.string(), 
+    limit: v.optional(v.number()) 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="targetType" type="'review' | 'log' | 'list'" required>
+  Type of content
+</ParamField>
+
+<ParamField path="targetId" type="string" required>
+  ID of the liked content
+</ParamField>
+
+**Returns:** Array of like documents.
+
+#### getForUserTarget
+
+Check if authenticated user liked a specific item.
+
+```typescript
+export const getForUserTarget = query({
+  args: { 
+    targetType: TargetType, 
+    targetId: v.string() 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Returns:** Like document or `null`.
+
+### Mutations
+
+#### toggle
+
+Like or unlike content.
+
+```typescript
+export const toggle = mutation({
+  args: { 
+    targetType: TargetType, 
+    targetId: v.string() 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Returns:** `{ liked: boolean }`
+
+**Rate limiting:** 60 likes per minute.
+
+## Comments
+
+### Queries
+
+#### listForTarget
+
+Get comments on a review, log, or list.
+
+```typescript
+export const listForTarget = query({
+  args: { 
+    targetType: TargetType, 
+    targetId: v.string(), 
+    paginationOpts: paginationOptsValidator 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Returns:** Paginated comments ordered by `createdAt` (most recent first).
+
+### Mutations
+
+#### add
+
+Add a comment.
+
+```typescript
+export const add = mutation({
+  args: { 
+    targetType: TargetType, 
+    targetId: v.string(), 
+    text: v.string() 
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="text" type="string" required>
+  Comment text (max 1000 characters)
+</ParamField>
+
+**Rate limiting:** 10 comments per minute.
+
+#### deleteComment
+
+Delete a comment.
+
+```typescript
+export const deleteComment = mutation({
+  args: { commentId: v.id("comments") },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Errors:**
+- `"Not allowed"` - User doesn't own this comment
+
+## Feed
+
+### Queries
+
+#### forUser
+
+Get activity feed for authenticated user.
+
+```typescript
+export const forUser = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="limit" type="number">
+  Maximum items (1-80, default 40)
+</ParamField>
+
+**Returns:** Array of hydrated feed items:
+
+<ResponseField name="type" type="'review'" required>
+  Feed item type
+</ResponseField>
+
+<ResponseField name="timestamp" type="number" required>
+  When action occurred
+</ResponseField>
+
+<ResponseField name="review" type="object" required>
+  Review document
+</ResponseField>
+
+<ResponseField name="user" type="PublicUser" required>
+  User who created the review
+</ResponseField>
+
+<ResponseField name="avatarUrl" type="string | null">
+  User's avatar URL
+</ResponseField>
+
+<ResponseField name="show" type="object">
+  Show that was reviewed
+</ResponseField>
+
+#### listForUser
+
+Get paginated activity feed.
+
+```typescript
+export const listForUser = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Returns:** Paginated hydrated feed items.
+
+**Feed generation:**
+- User's own reviews appear in their feed
+- Reviews from followed users appear in follower's feed
+- Limited to 500 followers per review for performance
+
+## Contact Sync
+
+### Actions
+
+#### syncSnapshot
+
+Sync phone contacts to find friends on Plotlist.
+
+```typescript
+export const syncSnapshot = action({
+  args: {
+    entries: v.array(
+      v.object({
+        sourceRecordId: v.optional(v.string()),
+        displayName: v.optional(v.string()),
+        phone: v.string(),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+<ParamField path="entries" type="array" required>
+  Contact entries with phone numbers
+</ParamField>
+
+**Returns:**
+
+<ResponseField name="totalCount" type="number" required>
+  Total contacts synced
+</ResponseField>
+
+<ResponseField name="matchedCount" type="number" required>
+  Contacts matched to users
+</ResponseField>
+
+<ResponseField name="inviteCount" type="number" required>
+  Contacts not on Plotlist
+</ResponseField>
+
+<ResponseField name="syncedAt" type="number" required>
+  Sync timestamp
+</ResponseField>
+
+**Rate limiting:** 6 syncs per 10 minutes.
+
+**Limits:** Maximum 2000 contacts per sync.
+
+**Privacy:**
+- Phone numbers are hashed before storage
+- Only matched user IDs are stored, not phone numbers
+- Contact data is deleted on account deletion
+
+### Queries
+
+#### getStatus
+
+Get contact sync status.
+
+```typescript
+export const getStatus = query({
+  args: {},
+  handler: async (ctx) => { ... },
+});
+```
+
+**Returns:**
+
+<ResponseField name="hasSynced" type="boolean" required>
+  Whether user has synced contacts
+</ResponseField>
+
+<ResponseField name="totalCount" type="number" required>
+  Total synced contacts
+</ResponseField>
+
+<ResponseField name="matchedCount" type="number" required>
+  Contacts on Plotlist
+</ResponseField>
+
+<ResponseField name="inviteCount" type="number" required>
+  Contacts not on Plotlist
+</ResponseField>
+
+<ResponseField name="lastSyncedAt" type="number | null">
+  Last sync timestamp
+</ResponseField>
+
+#### getMatches
+
+Get users matched from contacts.
+
+```typescript
+export const getMatches = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Returns:** Array of user previews.
+
+#### getInviteCandidates
+
+Get contacts not on Plotlist.
+
+```typescript
+export const getInviteCandidates = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Returns:** Array of contact entries with:
+- `entryId` - Contact entry ID
+- `displayName` - Contact name
+- `invitedAt` - Timestamp if already invited
+
+### Mutations
+
+#### sendInvite
+
+Mark a contact as invited.
+
+```typescript
+export const sendInvite = mutation({
+  args: { entryId: v.id("contactSyncEntries") },
+  handler: async (ctx, args) => { ... },
+});
+```
+
+**Rate limiting:** 10 invites per hour.
+
+#### clearSync
+
+Delete all synced contact data.
+
+```typescript
+export const clearSync = mutation({
+  args: {},
+  handler: async (ctx) => { ... },
+});
+```
+
+## Example Usage
+
+### Follow User
+
+```typescript
+import { useMutation, useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function FollowButton({ userId }: { userId: Id<"users"> }) {
+  const isFollowing = useQuery(api.follows.isFollowing, { userId });
+  const follow = useMutation(api.follows.follow);
+  const unfollow = useMutation(api.follows.unfollow);
+  
+  const handleClick = async () => {
+    if (isFollowing) {
+      await unfollow({ userIdToUnfollow: userId });
+    } else {
+      await follow({ userIdToFollow: userId });
+    }
+  };
+  
+  return (
+    <button onClick={handleClick}>
+      {isFollowing ? "Unfollow" : "Follow"}
+    </button>
+  );
+}
+```
+
+### Activity Feed
+
+```typescript
+import { useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function ActivityFeed() {
+  const feed = useQuery(api.feed.forUser, { limit: 20 });
+  
+  if (!feed) return <Loading />;
+  
+  return (
+    <div>
+      {feed.map((item) => (
+        <FeedItem key={item.review._id} item={item} />
+      ))}
+    </div>
+  );
+}
+```
+
+### Like/Unlike
+
+```typescript
+import { useMutation, useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function LikeButton({ 
+  reviewId 
+}: { 
+  reviewId: Id<"reviews"> 
+}) {
+  const liked = useQuery(api.likes.getForUserTarget, {
+    targetType: "review",
+    targetId: reviewId,
+  });
+  const toggle = useMutation(api.likes.toggle);
+  
+  const handleClick = async () => {
+    await toggle({
+      targetType: "review",
+      targetId: reviewId,
+    });
+  };
+  
+  return (
+    <button onClick={handleClick}>
+      {liked ? "❤️" : "🤍"}
+    </button>
+  );
+}
+```
+
+### Contact Sync
+
+```typescript
+import { useAction, useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+
+function ContactSync() {
+  const status = useQuery(api.contacts.getStatus);
+  const sync = useAction(api.contacts.syncSnapshot);
+  const matches = useQuery(api.contacts.getMatches, { limit: 20 });
+  
+  const handleSync = async () => {
+    // Get contacts from device
+    const contacts = await getDeviceContacts();
+    
+    const result = await sync({
+      entries: contacts.map(c => ({
+        phone: c.phoneNumber,
+        displayName: c.name,
+      })),
+    });
+    
+    console.log(`Found ${result.matchedCount} friends!`);
+  };
+  
+  return (
+    <div>
+      <button onClick={handleSync}>Sync Contacts</button>
+      {status?.hasSynced && (
+        <div>
+          <p>{status.matchedCount} friends on Plotlist</p>
+          <UserList users={matches ?? []} />
+        </div>
+      )}
+    </div>
+  );
+}
+```
