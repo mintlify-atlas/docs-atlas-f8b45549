@@ -1,0 +1,104 @@
+{
+  "projectType": "saas",
+  "projectName": "Plotlist",
+  "projectDescription": "A TV-first social tracking and discovery app for shows, episodes, reviews, and personalized recommendations",
+  "theme": "almond",
+  "primaryColor": "#7c7c7c",
+  "lightColor": "#090909",
+  "darkColor": "#c3c3c3",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/tracking",
+              "features/social",
+              "features/discovery",
+              "features/calendar"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "development/setup",
+              "development/architecture",
+              "development/convex-backend",
+              "development/authentication"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/environment-setup",
+              "guides/running-locally",
+              "guides/testing"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Backend",
+            "pages": [
+              "api/schema",
+              "api/users",
+              "api/shows",
+              "api/watch-states",
+              "api/reviews",
+              "api/lists",
+              "api/social",
+              "api/embeddings"
+            ]
+          },
+          {
+            "group": "Client",
+            "pages": [
+              "api/components",
+              "api/utilities"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "TV show tracking with watchlist, watching, completed, and dropped statuses",
+    "Episode-level progress tracking and logging",
+    "Social features with following, reviews, likes, and comments",
+    "AI-powered recommendations using embeddings and taste matching",
+    "Release calendar for upcoming episodes and premieres",
+    "Contact sync for friend discovery",
+    "Public and private lists with drag-and-drop reordering",
+    "Phone-based authentication with OTP",
+    "TMDB integration for show metadata and catalog"
+  ],
+  "publicApiSurface": [
+    "users - Profile management, onboarding, visibility controls",
+    "shows - TMDB ingestion, catalog search, show details",
+    "watchStates - Track show status (watchlist/watching/completed/dropped)",
+    "watchLogs - Log watched episodes and shows",
+    "episodeProgress - Track episode-level progress",
+    "reviews - Create and manage show/episode reviews",
+    "follows - Social graph and following relationships",
+    "lists - User-curated show collections",
+    "feedItems - Personalized activity feed",
+    "releaseCalendar - Upcoming episodes and premieres",
+    "embeddings - Taste profiles and recommendations",
+    "contacts - Contact sync and friend discovery",
+    "likes - Like reviews, logs, and lists",
+    "comments - Comment on user content",
+    "reports - Content moderation"
+  ]
+}
